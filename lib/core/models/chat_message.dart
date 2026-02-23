@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 enum MessageType { text, image, video, file }
+
 enum MessageStatus { sending, sent, delivered, read, failed }
 
 class ChatMessage {
@@ -61,8 +62,46 @@ class ChatMessage {
       fileType: json['fileType'] as String?,
       encryptedKey: json['encryptedKey'] as String?,
       status: MessageStatus.delivered,
-      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
     );
+  }
+
+  /// Convert a Drift [Message] row from local DB into a [ChatMessage].
+  factory ChatMessage.fromDb(dynamic row) {
+    return ChatMessage(
+      id: row.id as String,
+      conversationId: row.conversationId as String,
+      senderId: row.senderId as String,
+      recipientId: row.recipientId as String,
+      type: _typeFromString(row.type as String),
+      encryptedContent: row.encryptedContent as String?,
+      iv: row.iv as String?,
+      decryptedText: row.decryptedText as String?, // ← read from DB now
+      fileId: row.fileId as String?,
+      localFilePath: row.localFilePath as String?,
+      fileName: row.fileName as String?,
+      fileType: row.fileType as String?,
+      fileSize: row.fileSize as int?,
+      encryptedKey: row.encryptedKey as String?,
+      status: _statusFromString(row.status as String),
+      timestamp: DateTime.tryParse(row.timestamp as String) ?? DateTime.now(),
+    );
+  }
+
+  static MessageStatus _statusFromString(String s) {
+    switch (s) {
+      case 'sent':
+        return MessageStatus.sent;
+      case 'delivered':
+        return MessageStatus.delivered;
+      case 'read':
+        return MessageStatus.read;
+      case 'failed':
+        return MessageStatus.failed;
+      default:
+        return MessageStatus.sending;
+    }
   }
 
   Map<String, dynamic> toSocketJson() {
@@ -81,6 +120,7 @@ class ChatMessage {
   }
 
   ChatMessage copyWith({
+    String? conversationId,
     MessageStatus? status,
     String? decryptedText,
     String? localFilePath,
@@ -88,7 +128,7 @@ class ChatMessage {
   }) {
     return ChatMessage(
       id: id,
-      conversationId: conversationId,
+      conversationId: conversationId ?? this.conversationId,
       senderId: senderId,
       recipientId: recipientId,
       type: type,
@@ -108,10 +148,14 @@ class ChatMessage {
 
   static MessageType _typeFromString(String s) {
     switch (s) {
-      case 'image': return MessageType.image;
-      case 'video': return MessageType.video;
-      case 'file': return MessageType.file;
-      default: return MessageType.text;
+      case 'image':
+        return MessageType.image;
+      case 'video':
+        return MessageType.video;
+      case 'file':
+        return MessageType.file;
+      default:
+        return MessageType.text;
     }
   }
 }

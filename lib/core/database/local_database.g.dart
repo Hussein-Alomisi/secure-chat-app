@@ -731,6 +731,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
   late final GeneratedColumn<String> iv = GeneratedColumn<String>(
       'iv', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _decryptedTextMeta =
+      const VerificationMeta('decryptedText');
+  @override
+  late final GeneratedColumn<String> decryptedText = GeneratedColumn<String>(
+      'decrypted_text', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _fileIdMeta = const VerificationMeta('fileId');
   @override
   late final GeneratedColumn<String> fileId = GeneratedColumn<String>(
@@ -788,6 +794,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         type,
         encryptedContent,
         iv,
+        decryptedText,
         fileId,
         localFilePath,
         fileName,
@@ -848,6 +855,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     }
     if (data.containsKey('iv')) {
       context.handle(_ivMeta, iv.isAcceptableOrUnknown(data['iv']!, _ivMeta));
+    }
+    if (data.containsKey('decrypted_text')) {
+      context.handle(
+          _decryptedTextMeta,
+          decryptedText.isAcceptableOrUnknown(
+              data['decrypted_text']!, _decryptedTextMeta));
     }
     if (data.containsKey('file_id')) {
       context.handle(_fileIdMeta,
@@ -910,6 +923,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           DriftSqlType.string, data['${effectivePrefix}encrypted_content']),
       iv: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}iv']),
+      decryptedText: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}decrypted_text']),
       fileId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}file_id']),
       localFilePath: attachedDatabase.typeMapping
@@ -943,6 +958,7 @@ class Message extends DataClass implements Insertable<Message> {
   final String type;
   final String? encryptedContent;
   final String? iv;
+  final String? decryptedText;
   final String? fileId;
   final String? localFilePath;
   final String? fileName;
@@ -959,6 +975,7 @@ class Message extends DataClass implements Insertable<Message> {
       required this.type,
       this.encryptedContent,
       this.iv,
+      this.decryptedText,
       this.fileId,
       this.localFilePath,
       this.fileName,
@@ -980,6 +997,9 @@ class Message extends DataClass implements Insertable<Message> {
     }
     if (!nullToAbsent || iv != null) {
       map['iv'] = Variable<String>(iv);
+    }
+    if (!nullToAbsent || decryptedText != null) {
+      map['decrypted_text'] = Variable<String>(decryptedText);
     }
     if (!nullToAbsent || fileId != null) {
       map['file_id'] = Variable<String>(fileId);
@@ -1015,6 +1035,9 @@ class Message extends DataClass implements Insertable<Message> {
           ? const Value.absent()
           : Value(encryptedContent),
       iv: iv == null && nullToAbsent ? const Value.absent() : Value(iv),
+      decryptedText: decryptedText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decryptedText),
       fileId:
           fileId == null && nullToAbsent ? const Value.absent() : Value(fileId),
       localFilePath: localFilePath == null && nullToAbsent
@@ -1048,6 +1071,7 @@ class Message extends DataClass implements Insertable<Message> {
       type: serializer.fromJson<String>(json['type']),
       encryptedContent: serializer.fromJson<String?>(json['encryptedContent']),
       iv: serializer.fromJson<String?>(json['iv']),
+      decryptedText: serializer.fromJson<String?>(json['decryptedText']),
       fileId: serializer.fromJson<String?>(json['fileId']),
       localFilePath: serializer.fromJson<String?>(json['localFilePath']),
       fileName: serializer.fromJson<String?>(json['fileName']),
@@ -1069,6 +1093,7 @@ class Message extends DataClass implements Insertable<Message> {
       'type': serializer.toJson<String>(type),
       'encryptedContent': serializer.toJson<String?>(encryptedContent),
       'iv': serializer.toJson<String?>(iv),
+      'decryptedText': serializer.toJson<String?>(decryptedText),
       'fileId': serializer.toJson<String?>(fileId),
       'localFilePath': serializer.toJson<String?>(localFilePath),
       'fileName': serializer.toJson<String?>(fileName),
@@ -1088,6 +1113,7 @@ class Message extends DataClass implements Insertable<Message> {
           String? type,
           Value<String?> encryptedContent = const Value.absent(),
           Value<String?> iv = const Value.absent(),
+          Value<String?> decryptedText = const Value.absent(),
           Value<String?> fileId = const Value.absent(),
           Value<String?> localFilePath = const Value.absent(),
           Value<String?> fileName = const Value.absent(),
@@ -1106,6 +1132,8 @@ class Message extends DataClass implements Insertable<Message> {
             ? encryptedContent.value
             : this.encryptedContent,
         iv: iv.present ? iv.value : this.iv,
+        decryptedText:
+            decryptedText.present ? decryptedText.value : this.decryptedText,
         fileId: fileId.present ? fileId.value : this.fileId,
         localFilePath:
             localFilePath.present ? localFilePath.value : this.localFilePath,
@@ -1131,6 +1159,9 @@ class Message extends DataClass implements Insertable<Message> {
           ? data.encryptedContent.value
           : this.encryptedContent,
       iv: data.iv.present ? data.iv.value : this.iv,
+      decryptedText: data.decryptedText.present
+          ? data.decryptedText.value
+          : this.decryptedText,
       fileId: data.fileId.present ? data.fileId.value : this.fileId,
       localFilePath: data.localFilePath.present
           ? data.localFilePath.value
@@ -1156,6 +1187,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('type: $type, ')
           ..write('encryptedContent: $encryptedContent, ')
           ..write('iv: $iv, ')
+          ..write('decryptedText: $decryptedText, ')
           ..write('fileId: $fileId, ')
           ..write('localFilePath: $localFilePath, ')
           ..write('fileName: $fileName, ')
@@ -1177,6 +1209,7 @@ class Message extends DataClass implements Insertable<Message> {
       type,
       encryptedContent,
       iv,
+      decryptedText,
       fileId,
       localFilePath,
       fileName,
@@ -1196,6 +1229,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.type == this.type &&
           other.encryptedContent == this.encryptedContent &&
           other.iv == this.iv &&
+          other.decryptedText == this.decryptedText &&
           other.fileId == this.fileId &&
           other.localFilePath == this.localFilePath &&
           other.fileName == this.fileName &&
@@ -1214,6 +1248,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String> type;
   final Value<String?> encryptedContent;
   final Value<String?> iv;
+  final Value<String?> decryptedText;
   final Value<String?> fileId;
   final Value<String?> localFilePath;
   final Value<String?> fileName;
@@ -1231,6 +1266,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.type = const Value.absent(),
     this.encryptedContent = const Value.absent(),
     this.iv = const Value.absent(),
+    this.decryptedText = const Value.absent(),
     this.fileId = const Value.absent(),
     this.localFilePath = const Value.absent(),
     this.fileName = const Value.absent(),
@@ -1249,6 +1285,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     required String type,
     this.encryptedContent = const Value.absent(),
     this.iv = const Value.absent(),
+    this.decryptedText = const Value.absent(),
     this.fileId = const Value.absent(),
     this.localFilePath = const Value.absent(),
     this.fileName = const Value.absent(),
@@ -1272,6 +1309,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? type,
     Expression<String>? encryptedContent,
     Expression<String>? iv,
+    Expression<String>? decryptedText,
     Expression<String>? fileId,
     Expression<String>? localFilePath,
     Expression<String>? fileName,
@@ -1290,6 +1328,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (type != null) 'type': type,
       if (encryptedContent != null) 'encrypted_content': encryptedContent,
       if (iv != null) 'iv': iv,
+      if (decryptedText != null) 'decrypted_text': decryptedText,
       if (fileId != null) 'file_id': fileId,
       if (localFilePath != null) 'local_file_path': localFilePath,
       if (fileName != null) 'file_name': fileName,
@@ -1310,6 +1349,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       Value<String>? type,
       Value<String?>? encryptedContent,
       Value<String?>? iv,
+      Value<String?>? decryptedText,
       Value<String?>? fileId,
       Value<String?>? localFilePath,
       Value<String?>? fileName,
@@ -1327,6 +1367,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       type: type ?? this.type,
       encryptedContent: encryptedContent ?? this.encryptedContent,
       iv: iv ?? this.iv,
+      decryptedText: decryptedText ?? this.decryptedText,
       fileId: fileId ?? this.fileId,
       localFilePath: localFilePath ?? this.localFilePath,
       fileName: fileName ?? this.fileName,
@@ -1362,6 +1403,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     }
     if (iv.present) {
       map['iv'] = Variable<String>(iv.value);
+    }
+    if (decryptedText.present) {
+      map['decrypted_text'] = Variable<String>(decryptedText.value);
     }
     if (fileId.present) {
       map['file_id'] = Variable<String>(fileId.value);
@@ -1403,6 +1447,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('type: $type, ')
           ..write('encryptedContent: $encryptedContent, ')
           ..write('iv: $iv, ')
+          ..write('decryptedText: $decryptedText, ')
           ..write('fileId: $fileId, ')
           ..write('localFilePath: $localFilePath, ')
           ..write('fileName: $fileName, ')
@@ -1750,6 +1795,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required String type,
   Value<String?> encryptedContent,
   Value<String?> iv,
+  Value<String?> decryptedText,
   Value<String?> fileId,
   Value<String?> localFilePath,
   Value<String?> fileName,
@@ -1768,6 +1814,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String> type,
   Value<String?> encryptedContent,
   Value<String?> iv,
+  Value<String?> decryptedText,
   Value<String?> fileId,
   Value<String?> localFilePath,
   Value<String?> fileName,
@@ -1803,6 +1850,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String> type = const Value.absent(),
             Value<String?> encryptedContent = const Value.absent(),
             Value<String?> iv = const Value.absent(),
+            Value<String?> decryptedText = const Value.absent(),
             Value<String?> fileId = const Value.absent(),
             Value<String?> localFilePath = const Value.absent(),
             Value<String?> fileName = const Value.absent(),
@@ -1821,6 +1869,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             type: type,
             encryptedContent: encryptedContent,
             iv: iv,
+            decryptedText: decryptedText,
             fileId: fileId,
             localFilePath: localFilePath,
             fileName: fileName,
@@ -1839,6 +1888,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             required String type,
             Value<String?> encryptedContent = const Value.absent(),
             Value<String?> iv = const Value.absent(),
+            Value<String?> decryptedText = const Value.absent(),
             Value<String?> fileId = const Value.absent(),
             Value<String?> localFilePath = const Value.absent(),
             Value<String?> fileName = const Value.absent(),
@@ -1857,6 +1907,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             type: type,
             encryptedContent: encryptedContent,
             iv: iv,
+            decryptedText: decryptedText,
             fileId: fileId,
             localFilePath: localFilePath,
             fileName: fileName,
@@ -1900,6 +1951,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get iv => $state.composableBuilder(
       column: $state.table.iv,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get decryptedText => $state.composableBuilder(
+      column: $state.table.decryptedText,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -1986,6 +2042,11 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<String> get iv => $state.composableBuilder(
       column: $state.table.iv,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get decryptedText => $state.composableBuilder(
+      column: $state.table.decryptedText,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

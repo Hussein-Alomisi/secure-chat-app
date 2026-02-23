@@ -36,12 +36,16 @@ class Messages extends Table {
   TextColumn get type => text()(); // 'text' | 'image' | 'video' | 'file'
   TextColumn get encryptedContent => text().nullable()(); // for text messages
   TextColumn get iv => text().nullable()(); // AES IV, base64
+  TextColumn get decryptedText =>
+      text().nullable()(); // plaintext (local only, not transmitted)
   TextColumn get fileId => text().nullable()(); // server file ID after upload
-  TextColumn get localFilePath => text().nullable()(); // local path after download
+  TextColumn get localFilePath =>
+      text().nullable()(); // local path after download
   TextColumn get fileName => text().nullable()();
   TextColumn get fileType => text().nullable()(); // MIME type
   IntColumn get fileSize => integer().nullable()();
-  TextColumn get encryptedKey => text().nullable()(); // encrypted AES key for file
+  TextColumn get encryptedKey =>
+      text().nullable()(); // encrypted AES key for file
   TextColumn get status => text().withDefault(const Constant('sending'))();
   // 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
   TextColumn get timestamp => text()();
@@ -57,7 +61,19 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (migrator, from, to) async {
+          if (from < 2) {
+            // Add decryptedText column — SQLite allows adding nullable columns
+            await migrator.database.customStatement(
+              'ALTER TABLE messages ADD COLUMN decrypted_text TEXT;',
+            );
+          }
+        },
+      );
 
   static QueryExecutor _openConnection() {
     return driftDatabase(name: 'securechat_db');
@@ -72,11 +88,11 @@ class LocalDatabase extends _$LocalDatabase {
   Future<List<AppUser>> getAllUsers() => select(appUsers).get();
 
   Future<AppUser?> getUserById(String id) {
-    return (select(appUsers)..where((u) => u.id.equals(id)))
-        .getSingleOrNull();
+    return (select(appUsers)..where((u) => u.id.equals(id))).getSingleOrNull();
   }
 
-  Future<void> setUserOnlineStatus(String userId, bool isOnline, String? lastSeen) {
+  Future<void> setUserOnlineStatus(
+      String userId, bool isOnline, String? lastSeen) {
     return (update(appUsers)..where((u) => u.id.equals(userId))).write(
       AppUsersCompanion(
         isOnline: Value(isOnline),
@@ -131,8 +147,7 @@ class LocalDatabase extends _$LocalDatabase {
     String preview,
     String timestamp,
   ) {
-    return (update(conversations)
-          ..where((c) => c.id.equals(conversationId)))
+    return (update(conversations)..where((c) => c.id.equals(conversationId)))
         .write(ConversationsCompanion(
       lastMessagePreview: Value(preview),
       lastMessageTime: Value(timestamp),
@@ -147,8 +162,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> clearUnread(String conversationId) {
-    return (update(conversations)
-          ..where((c) => c.id.equals(conversationId)))
+    return (update(conversations)..where((c) => c.id.equals(conversationId)))
         .write(const ConversationsCompanion(unreadCount: Value(0)));
   }
 
@@ -161,6 +175,15 @@ class LocalDatabase extends _$LocalDatabase {
             (m) => OrderingTerm(expression: m.timestamp),
           ]))
         .watch();
+  }
+
+  Future<List<Message>> getMessages(String conversationId) {
+    return (select(messages)
+          ..where((m) => m.conversationId.equals(conversationId))
+          ..orderBy([
+            (m) => OrderingTerm(expression: m.timestamp),
+          ]))
+        .get();
   }
 
   Future<void> insertMessage(MessagesCompanion message) async {

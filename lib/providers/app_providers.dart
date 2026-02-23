@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -21,7 +22,9 @@ final apiServiceProvider = Provider<ApiService>((ref) {
 });
 
 final socketServiceProvider = Provider<SocketService>((ref) {
-  return SocketService();
+  final s = SocketService();
+  ref.onDispose(s.dispose);
+  return s;
 });
 
 final localDatabaseProvider = Provider<LocalDatabase>((ref) {
@@ -76,8 +79,179 @@ class AuthNotifier extends StateNotifier<AuthState> {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  // Global subscription — saves ALL incoming messages to DB immediately,
+  // regardless of which screen is open.
+  StreamSubscription<Map<String, dynamic>>? _globalMsgSub;
+
   AuthNotifier(this._api, this._enc, this._socket, this._db)
       : super(const AuthState());
+
+  /// Called after connecting. Listens to ALL messages globally.
+  void _startGlobalMessageListener(String myUserId) {
+    _globalMsgSub?.cancel();
+    AppLogger.i(
+      '╔══ GLOBAL LISTENER STARTED ══╗\n'
+      '│ myUserId: $myUserId\n'
+      '╚═════════════════════════════╝',
+      tag: 'AUTH',
+    );
+    _globalMsgSub = _socket.messageStream.listen(
+      (data) async {
+        AppLogger.i(
+          '╔══ GLOBAL: MESSAGE RECEIVED ══╗\n'
+          '│ from  : ${data['senderId']}\n'
+          '│ to    : ${data['recipientId']}\n'
+          '│ type  : ${data['type']}\n'
+          '│ msgId : ${data['messageId']}\n'
+          '╚══════════════════════════════╝',
+          tag: 'AUTH',
+        );
+        try {
+          // STEP 1: Parse
+          final msg = ChatMessage.fromJson(data);
+          AppLogger.d('STEP 1 ✓ fromJson — id:${msg.id}', tag: 'AUTH');
+
+          // STEP 2: Ensure sender in AppUsers (FK)
+          final senderExists = await _db.getUserById(msg.senderId);
+          AppLogger.d('STEP 2: senderExists=${senderExists != null}',
+              tag: 'AUTH');
+          if (senderExists == null) {
+            AppLogger.w(
+              'STEP 2: sender ${msg.senderId} not in local DB — fetching users from API',
+              tag: 'AUTH',
+            );
+            try {
+              final users = await _api.getUsers();
+              AppLogger.d('STEP 2: API returned ${users.length} users',
+                  tag: 'AUTH');
+              for (final u in users) {
+                await _db.upsertUser(AppUsersCompanion(
+                  id: Value(u['id'] as String),
+                  name: Value(u['name'] as String),
+                  avatarColor: Value(u['avatarColor'] as String? ?? '#6C63FF'),
+                  publicKey: Value(u['publicKey'] as String?),
+                ));
+              }
+              AppLogger.d('STEP 2 ✓ All users upserted to local DB',
+                  tag: 'AUTH');
+            } catch (e) {
+              AppLogger.e('STEP 2: getUsers failed — inserting placeholder',
+                  tag: 'AUTH', error: e);
+              await _db.upsertUser(AppUsersCompanion(
+                id: Value(msg.senderId),
+                name: Value(msg.senderId),
+                avatarColor: const Value('#6C63FF'),
+              ));
+              AppLogger.w('STEP 2 ✓ placeholder inserted for ${msg.senderId}',
+                  tag: 'AUTH');
+            }
+          }
+
+          // STEP 3: Decrypt
+          ChatMessage processed = msg;
+          if (msg.type == MessageType.text) {
+            AppLogger.d('STEP 3: decrypting text message...', tag: 'AUTH');
+            try {
+              final senderKey = await _api.getUserPublicKey(msg.senderId);
+              AppLogger.d(
+                  'STEP 3: senderKey=${senderKey != null ? senderKey.substring(0, 12) + "..." : "NULL"}',
+                  tag: 'AUTH');
+              if (senderKey != null) {
+                final decrypted = await _enc.decryptText(
+                  ciphertextBase64: msg.encryptedContent!,
+                  ivBase64: msg.iv!,
+                  senderPublicKeyBase64: senderKey,
+                );
+                processed = msg.copyWith(
+                  status: MessageStatus.delivered,
+                  decryptedText: decrypted,
+                );
+                AppLogger.d(
+                    'STEP 3 ✓ decrypted: "${decrypted.substring(0, decrypted.length.clamp(0, 30))}..."',
+                    tag: 'AUTH');
+              } else {
+                AppLogger.w(
+                    'STEP 3: sender public key is null — storing encrypted',
+                    tag: 'AUTH');
+                processed = msg.copyWith(status: MessageStatus.delivered);
+              }
+            } catch (e) {
+              AppLogger.e('STEP 3: decryption FAILED', tag: 'AUTH', error: e);
+              processed = msg.copyWith(status: MessageStatus.delivered);
+            }
+          } else {
+            AppLogger.d('STEP 3: skipped (non-text type: ${msg.type.name})',
+                tag: 'AUTH');
+          }
+
+          // STEP 4: Save to DB
+          AppLogger.d('STEP 4: getOrCreateConversation(${msg.senderId})...',
+              tag: 'AUTH');
+          final convId = await _db.getOrCreateConversation(msg.senderId);
+          AppLogger.d('STEP 4: convId=$convId', tag: 'AUTH');
+          final msgWithConv = processed.copyWith(conversationId: convId);
+          await _saveToDb(msgWithConv);
+          AppLogger.d('STEP 4 ✓ message saved to DB', tag: 'AUTH');
+
+          await _db.updateConversationLastMessage(
+            convId,
+            msg.type == MessageType.text ? '🔒 رسالة مشفرة' : '📎 ملف',
+            msg.timestamp.toIso8601String(),
+          );
+          AppLogger.d('STEP 4 ✓ conversation last-message updated',
+              tag: 'AUTH');
+
+          // STEP 5: Ack
+          _socket.sendDeliveredAck(msg.id, msg.senderId);
+          AppLogger.i(
+            '╔══ GLOBAL: msg ${msg.id} COMPLETE ✓ ══╗\n'
+            '│ saved to DB, ack sent\n'
+            '╚════════════════════════════════════╝',
+            tag: 'AUTH',
+          );
+        } catch (e, stack) {
+          AppLogger.e(
+            '╔══ GLOBAL LISTENER ERROR ══╗\n'
+            '│ $e\n'
+            '╚═══════════════════════════╝',
+            tag: 'AUTH',
+            error: e,
+          );
+          AppLogger.e('Stack: $stack', tag: 'AUTH');
+        }
+      },
+      onError: (e) {
+        AppLogger.e('GLOBAL LISTENER stream error: $e', tag: 'AUTH');
+      },
+      onDone: () {
+        AppLogger.w('GLOBAL LISTENER stream DONE (closed?)', tag: 'AUTH');
+      },
+    );
+    AppLogger.i('Global message listener registered ✓', tag: 'AUTH');
+  }
+
+  Future<void> _saveToDb(ChatMessage msg) async {
+    await _db.insertMessage(MessagesCompanion(
+      id: Value(msg.id),
+      conversationId: Value(msg.conversationId),
+      senderId: Value(msg.senderId),
+      recipientId: Value(msg.recipientId),
+      type: Value(msg.type.name),
+      encryptedContent: Value(msg.encryptedContent),
+      iv: Value(msg.iv),
+      decryptedText: Value(msg.decryptedText),
+      fileId: Value(msg.fileId),
+      localFilePath: Value(msg.localFilePath),
+      fileName: Value(msg.fileName),
+      fileType: Value(msg.fileType),
+      fileSize: Value(msg.fileSize),
+      encryptedKey: Value(msg.encryptedKey),
+      status: Value(msg.status.name),
+      timestamp: Value(msg.timestamp.toIso8601String()),
+    ));
+  }
+
+  // ─── Auth actions ─────────────────────────────────────────────────────────
 
   Future<void> tryAutoLogin() async {
     AppLogger.i('Checking stored credentials...', tag: 'AUTH');
@@ -89,10 +263,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (token != null && userId != null) {
       AppLogger.i('Found saved session — userId: $userId', tag: 'AUTH');
       _api.setToken(token);
-      AppLogger.d('API token set', tag: 'AUTH');
       await _enc.initialize();
-      AppLogger.d('Encryption keys loaded from secure storage', tag: 'AUTH');
+      AppLogger.d('Encryption keys loaded', tag: 'AUTH');
       _socket.connect(token);
+      _startGlobalMessageListener(userId);
       state = AuthState(
         isLoggedIn: true,
         userId: userId,
@@ -110,14 +284,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     AppLogger.i('Login attempt — userId: $userId', tag: 'AUTH');
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Step 1: init encryption & get public key
       AppLogger.d('Initializing encryption service...', tag: 'AUTH');
       await _enc.initialize();
       final publicKey = await _enc.getPublicKeyBase64();
       AppLogger.d('X25519 public key ready (${publicKey.substring(0, 12)}...)',
           tag: 'AUTH');
 
-      // Step 2: API login
       AppLogger.d('Sending login request to server...', tag: 'AUTH');
       final result = await _api.login(
         userId: userId,
@@ -129,8 +301,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = result['user'] as Map<String, dynamic>;
       AppLogger.i('Server responded OK — user: ${user['name']}', tag: 'AUTH');
 
-      // Step 3: persist credentials
-      AppLogger.d('Saving credentials to secure storage...', tag: 'AUTH');
       await _storage.write(key: 'jwt_token', value: token);
       await _storage.write(key: 'user_id', value: user['id'] as String);
       await _storage.write(key: 'user_name', value: user['name'] as String);
@@ -138,10 +308,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           key: 'avatar_color',
           value: user['avatarColor'] as String? ?? '#6C63FF');
 
-      // Step 4: connect socket
       _api.setToken(token);
       AppLogger.d('JWT token applied to API service', tag: 'AUTH');
+
       _socket.connect(token);
+      _startGlobalMessageListener(user['id'] as String);
 
       state = state.copyWith(
         isLoggedIn: true,
@@ -162,6 +333,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     AppLogger.i('Logging out user: ${state.userId}', tag: 'AUTH');
+    await _globalMsgSub?.cancel();
+    _globalMsgSub = null;
     _socket.disconnect();
     _api.clearToken();
     await _storage.deleteAll();
@@ -198,6 +371,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   final LocalDatabase _db;
   String? _peerPublicKey;
   String? _conversationId;
+  StreamSubscription<Map<String, dynamic>>? _msgSub;
 
   ChatNotifier({
     required this.peerId,
@@ -223,51 +397,42 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
           tag: 'CHAT');
     } else {
       AppLogger.w(
-          'Peer public key not found — E2EE will not work until peer logs in',
+          'Peer public key not found — E2EE unavailable until peer logs in',
           tag: 'CHAT');
     }
 
     _conversationId = await _db.getOrCreateConversation(peerId);
     AppLogger.d('Conversation ready: $_conversationId', tag: 'CHAT');
+
+    // Load existing messages from local DB into UI state
+    final existing = await _db.getMessages(_conversationId!);
+    state = existing.map((r) => ChatMessage.fromDb(r)).toList();
+    AppLogger.d('Loaded ${existing.length} messages from local DB',
+        tag: 'CHAT');
+
     await _db.clearUnread(_conversationId!);
 
-    _socket.onMessageReceived = _handleIncomingMessage;
+    // Subscribe to the global stream, filter for this peer only (for UI updates)
+    _msgSub?.cancel();
+    _msgSub = _socket.messageStream
+        .where((data) => data['senderId'] == peerId)
+        .listen(_handleIncomingForUI);
+
     AppLogger.i('Chat initialized ✓', tag: 'CHAT');
   }
 
-  Future<void> _handleIncomingMessage(ChatMessage raw) async {
-    if (raw.senderId != peerId) return;
+  /// Called only for UI refresh — the message is already saved to DB
+  /// by AuthNotifier's global listener.
+  /// We wait briefly to let the async global listener finish writing to DB first.
+  void _handleIncomingForUI(Map<String, dynamic> data) {
+    AppLogger.d('UI refresh queued for msg from $peerId', tag: 'CHAT');
+    Future.delayed(const Duration(milliseconds: 500), _refreshFromDb);
+  }
 
-    AppLogger.d('Incoming message — id:${raw.id} type:${raw.type.name}',
-        tag: 'CHAT');
-    ChatMessage message = raw.copyWith();
-
-    if (raw.type == MessageType.text && _peerPublicKey != null) {
-      AppLogger.d('Decrypting text message...', tag: 'CHAT');
-      try {
-        final decrypted = await _enc.decryptText(
-          ciphertextBase64: raw.encryptedContent!,
-          ivBase64: raw.iv!,
-          senderPublicKeyBase64: _peerPublicKey!,
-        );
-        message = raw.copyWith(
-          status: MessageStatus.delivered,
-          decryptedText: decrypted,
-        );
-        AppLogger.d('Decryption successful ✓', tag: 'CHAT');
-      } catch (e) {
-        AppLogger.e('Decryption failed for msg:${raw.id}',
-            tag: 'CHAT', error: e);
-        message = raw.copyWith(status: MessageStatus.failed);
-      }
-    }
-
-    AppLogger.v('Saving message to local DB...', tag: 'CHAT');
-    await _saveMessageToDb(message);
-    state = [...state, message];
-
-    _socket.sendDeliveredAck(raw.id, raw.senderId);
-    AppLogger.v('Delivered ack sent for msg:${raw.id}', tag: 'CHAT');
+  Future<void> _refreshFromDb() async {
+    if (_conversationId == null) return;
+    final msgs = await _db.getMessages(_conversationId!);
+    state = msgs.map((r) => ChatMessage.fromDb(r)).toList();
   }
 
   Future<void> sendText(String text) async {
@@ -283,8 +448,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       plaintext: text,
       recipientPublicKeyBase64: _peerPublicKey!,
     );
-    AppLogger.d('Encryption done ✓ iv:${encrypted['iv']?.substring(0, 8)}...',
-        tag: 'CHAT');
+    AppLogger.d('Encryption done ✓', tag: 'CHAT');
 
     final msg = ChatMessage(
       id: msgId,
@@ -464,6 +628,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       type: Value(msg.type.name),
       encryptedContent: Value(msg.encryptedContent),
       iv: Value(msg.iv),
+      decryptedText: Value(msg.decryptedText),
       fileId: Value(msg.fileId),
       localFilePath: Value(msg.localFilePath),
       fileName: Value(msg.fileName),
@@ -490,6 +655,12 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       default:
         return 'files';
     }
+  }
+
+  @override
+  void dispose() {
+    _msgSub?.cancel();
+    super.dispose();
   }
 }
 
