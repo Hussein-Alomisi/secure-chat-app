@@ -6,10 +6,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 class ApiService {
-  static const String _serverUrl = String.fromEnvironment(
-    'SERVER_URL',
-    defaultValue: 'http://192.168.0.183:3000',
-  );
+  // static const String _serverUrl = String.fromEnvironment(
+  //   'SERVER_URL',
+  //   // defaultValue: 'http://192.168.0.183:3000',
+  // );
+  // On-Render
+  static const String _serverUrl = 'http://18.191.182.0:3000';
 
   late final Dio _dio;
   String? _jwtToken;

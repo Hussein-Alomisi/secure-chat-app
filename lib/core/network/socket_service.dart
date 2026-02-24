@@ -10,10 +10,13 @@ typedef TypingCallback = void Function(String userId, bool isTyping);
 class SocketService {
   static const _tag = 'SOCKET';
 
-  static const String _serverUrl = String.fromEnvironment(
-    'SERVER_URL',
-    defaultValue: 'http://192.168.0.183:3000',
-  );
+  // static const String _serverUrl = String.fromEnvironment(
+  //   'SERVER_URL',
+  //   defaultValue: 'http://192.168.0.183:3000',
+
+  // );
+
+  static const String _serverUrl = 'http://18.191.182.0:3000';
 
   IO.Socket? _socket;
   bool _isConnected = false;
@@ -56,12 +59,14 @@ class SocketService {
       _serverUrl,
       IO.OptionBuilder()
           .setTransports(['websocket'])
+          .setPath('/socket.io/') // أضف هذا السطر
           .setAuth({'token': jwtToken})
           .enableAutoConnect()
           .enableReconnection()
           .setReconnectionAttempts(double.infinity)
           .setReconnectionDelay(2000)
           .setReconnectionDelayMax(10000)
+          .enableForceNew()
           .build(),
     );
 
