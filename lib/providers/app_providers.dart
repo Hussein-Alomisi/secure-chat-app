@@ -59,15 +59,14 @@ class AuthState {
     String? avatarColor,
     bool? isLoading,
     String? error,
-  }) =>
-      AuthState(
-        isLoggedIn: isLoggedIn ?? this.isLoggedIn,
-        userId: userId ?? this.userId,
-        userName: userName ?? this.userName,
-        avatarColor: avatarColor ?? this.avatarColor,
-        isLoading: isLoading ?? this.isLoading,
-        error: error,
-      );
+  }) => AuthState(
+    isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+    userId: userId ?? this.userId,
+    userName: userName ?? this.userName,
+    avatarColor: avatarColor ?? this.avatarColor,
+    isLoading: isLoading ?? this.isLoading,
+    error: error,
+  );
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -84,7 +83,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   StreamSubscription<Map<String, dynamic>>? _globalMsgSub;
 
   AuthNotifier(this._api, this._enc, this._socket, this._db)
-      : super(const AuthState());
+    : super(const AuthState());
 
   /// Called after connecting. Listens to ALL messages globally.
   void _startGlobalMessageListener(String myUserId) {
@@ -113,8 +112,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
           // STEP 2: Ensure sender in AppUsers (FK)
           final senderExists = await _db.getUserById(msg.senderId);
-          AppLogger.d('STEP 2: senderExists=${senderExists != null}',
-              tag: 'AUTH');
+          AppLogger.d(
+            'STEP 2: senderExists=${senderExists != null}',
+            tag: 'AUTH',
+          );
           if (senderExists == null) {
             AppLogger.w(
               'STEP 2: sender ${msg.senderId} not in local DB — fetching users from API',
@@ -122,28 +123,43 @@ class AuthNotifier extends StateNotifier<AuthState> {
             );
             try {
               final users = await _api.getUsers();
-              AppLogger.d('STEP 2: API returned ${users.length} users',
-                  tag: 'AUTH');
+              AppLogger.d(
+                'STEP 2: API returned ${users.length} users',
+                tag: 'AUTH',
+              );
               for (final u in users) {
-                await _db.upsertUser(AppUsersCompanion(
-                  id: Value(u['id'] as String),
-                  name: Value(u['name'] as String),
-                  avatarColor: Value(u['avatarColor'] as String? ?? '#6C63FF'),
-                  publicKey: Value(u['publicKey'] as String?),
-                ));
+                await _db.upsertUser(
+                  AppUsersCompanion(
+                    id: Value(u['id'] as String),
+                    name: Value(u['name'] as String),
+                    avatarColor: Value(
+                      u['avatarColor'] as String? ?? '#6C63FF',
+                    ),
+                    publicKey: Value(u['publicKey'] as String?),
+                  ),
+                );
               }
-              AppLogger.d('STEP 2 ✓ All users upserted to local DB',
-                  tag: 'AUTH');
+              AppLogger.d(
+                'STEP 2 ✓ All users upserted to local DB',
+                tag: 'AUTH',
+              );
             } catch (e) {
-              AppLogger.e('STEP 2: getUsers failed — inserting placeholder',
-                  tag: 'AUTH', error: e);
-              await _db.upsertUser(AppUsersCompanion(
-                id: Value(msg.senderId),
-                name: Value(msg.senderId),
-                avatarColor: const Value('#6C63FF'),
-              ));
-              AppLogger.w('STEP 2 ✓ placeholder inserted for ${msg.senderId}',
-                  tag: 'AUTH');
+              AppLogger.e(
+                'STEP 2: getUsers failed — inserting placeholder',
+                tag: 'AUTH',
+                error: e,
+              );
+              await _db.upsertUser(
+                AppUsersCompanion(
+                  id: Value(msg.senderId),
+                  name: Value(msg.senderId),
+                  avatarColor: const Value('#6C63FF'),
+                ),
+              );
+              AppLogger.w(
+                'STEP 2 ✓ placeholder inserted for ${msg.senderId}',
+                tag: 'AUTH',
+              );
             }
           }
 
@@ -154,8 +170,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             try {
               final senderKey = await _api.getUserPublicKey(msg.senderId);
               AppLogger.d(
-                  'STEP 3: senderKey=${senderKey != null ? senderKey.substring(0, 12) + "..." : "NULL"}',
-                  tag: 'AUTH');
+                'STEP 3: senderKey=${senderKey != null ? senderKey.substring(0, 12) + "..." : "NULL"}',
+                tag: 'AUTH',
+              );
               if (senderKey != null) {
                 final decrypted = await _enc.decryptText(
                   ciphertextBase64: msg.encryptedContent!,
@@ -167,12 +184,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
                   decryptedText: decrypted,
                 );
                 AppLogger.d(
-                    'STEP 3 ✓ decrypted: "${decrypted.substring(0, decrypted.length.clamp(0, 30))}..."',
-                    tag: 'AUTH');
+                  'STEP 3 ✓ decrypted: "${decrypted.substring(0, decrypted.length.clamp(0, 30))}..."',
+                  tag: 'AUTH',
+                );
               } else {
                 AppLogger.w(
-                    'STEP 3: sender public key is null — storing encrypted',
-                    tag: 'AUTH');
+                  'STEP 3: sender public key is null — storing encrypted',
+                  tag: 'AUTH',
+                );
                 processed = msg.copyWith(status: MessageStatus.delivered);
               }
             } catch (e) {
@@ -180,13 +199,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
               processed = msg.copyWith(status: MessageStatus.delivered);
             }
           } else {
-            AppLogger.d('STEP 3: skipped (non-text type: ${msg.type.name})',
-                tag: 'AUTH');
+            AppLogger.d(
+              'STEP 3: skipped (non-text type: ${msg.type.name})',
+              tag: 'AUTH',
+            );
           }
 
           // STEP 4: Save to DB
-          AppLogger.d('STEP 4: getOrCreateConversation(${msg.senderId})...',
-              tag: 'AUTH');
+          AppLogger.d(
+            'STEP 4: getOrCreateConversation(${msg.senderId})...',
+            tag: 'AUTH',
+          );
           final convId = await _db.getOrCreateConversation(msg.senderId);
           AppLogger.d('STEP 4: convId=$convId', tag: 'AUTH');
           final msgWithConv = processed.copyWith(conversationId: convId);
@@ -198,8 +221,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
             msg.type == MessageType.text ? '🔒 رسالة مشفرة' : '📎 ملف',
             msg.timestamp.toIso8601String(),
           );
-          AppLogger.d('STEP 4 ✓ conversation last-message updated',
-              tag: 'AUTH');
+          AppLogger.d(
+            'STEP 4 ✓ conversation last-message updated',
+            tag: 'AUTH',
+          );
 
           // STEP 5: Ack + notify ChatNotifier the DB is ready
           _socket.sendDeliveredAck(msg.id, msg.senderId);
@@ -232,24 +257,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _saveToDb(ChatMessage msg) async {
-    await _db.insertMessage(MessagesCompanion(
-      id: Value(msg.id),
-      conversationId: Value(msg.conversationId),
-      senderId: Value(msg.senderId),
-      recipientId: Value(msg.recipientId),
-      type: Value(msg.type.name),
-      encryptedContent: Value(msg.encryptedContent),
-      iv: Value(msg.iv),
-      decryptedText: Value(msg.decryptedText),
-      fileId: Value(msg.fileId),
-      localFilePath: Value(msg.localFilePath),
-      fileName: Value(msg.fileName),
-      fileType: Value(msg.fileType),
-      fileSize: Value(msg.fileSize),
-      encryptedKey: Value(msg.encryptedKey),
-      status: Value(msg.status.name),
-      timestamp: Value(msg.timestamp.toIso8601String()),
-    ));
+    await _db.insertMessage(
+      MessagesCompanion(
+        id: Value(msg.id),
+        conversationId: Value(msg.conversationId),
+        senderId: Value(msg.senderId),
+        recipientId: Value(msg.recipientId),
+        type: Value(msg.type.name),
+        encryptedContent: Value(msg.encryptedContent),
+        iv: Value(msg.iv),
+        decryptedText: Value(msg.decryptedText),
+        fileId: Value(msg.fileId),
+        localFilePath: Value(msg.localFilePath),
+        fileName: Value(msg.fileName),
+        fileType: Value(msg.fileType),
+        fileSize: Value(msg.fileSize),
+        encryptedKey: Value(msg.encryptedKey),
+        status: Value(msg.status.name),
+        timestamp: Value(msg.timestamp.toIso8601String()),
+      ),
+    );
   }
 
   // ─── Auth actions ─────────────────────────────────────────────────────────
@@ -274,8 +301,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userName: userName,
         avatarColor: avatarColor,
       );
-      AppLogger.i('Auto-login successful — welcome back $userName',
-          tag: 'AUTH');
+      AppLogger.i(
+        'Auto-login successful — welcome back $userName',
+        tag: 'AUTH',
+      );
     } else {
       AppLogger.i('No saved session found — showing login screen', tag: 'AUTH');
     }
@@ -288,8 +317,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       AppLogger.d('Initializing encryption service...', tag: 'AUTH');
       await _enc.initialize();
       final publicKey = await _enc.getPublicKeyBase64();
-      AppLogger.d('X25519 public key ready (${publicKey.substring(0, 12)}...)',
-          tag: 'AUTH');
+      AppLogger.d(
+        'X25519 public key ready (${publicKey.substring(0, 12)}...)',
+        tag: 'AUTH',
+      );
 
       AppLogger.d('Sending login request to server...', tag: 'AUTH');
       final result = await _api.login(
@@ -306,8 +337,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _storage.write(key: 'user_id', value: user['id'] as String);
       await _storage.write(key: 'user_name', value: user['name'] as String);
       await _storage.write(
-          key: 'avatar_color',
-          value: user['avatarColor'] as String? ?? '#6C63FF');
+        key: 'avatar_color',
+        value: user['avatarColor'] as String? ?? '#6C63FF',
+      );
 
       _api.setToken(token);
       AppLogger.d('JWT token applied to API service', tag: 'AUTH');
@@ -381,11 +413,11 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     required EncryptionService enc,
     required SocketService socket,
     required LocalDatabase db,
-  })  : _api = api,
-        _enc = enc,
-        _socket = socket,
-        _db = db,
-        super([]);
+  }) : _api = api,
+       _enc = enc,
+       _socket = socket,
+       _db = db,
+       super([]);
 
   Future<void> initialize() async {
     AppLogger.i('Initializing chat with peer: $peerId', tag: 'CHAT');
@@ -394,32 +426,31 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     _peerPublicKey = await _api.getUserPublicKey(peerId);
     if (_peerPublicKey != null) {
       AppLogger.d(
-          'Peer public key received (${_peerPublicKey!.substring(0, 12)}...)',
-          tag: 'CHAT');
+        'Peer public key received (${_peerPublicKey!.substring(0, 12)}...)',
+        tag: 'CHAT',
+      );
     } else {
       AppLogger.w(
-          'Peer public key not found — E2EE unavailable until peer logs in',
-          tag: 'CHAT');
+        'Peer public key not found — E2EE unavailable until peer logs in',
+        tag: 'CHAT',
+      );
     }
 
     _conversationId = await _db.getOrCreateConversation(peerId);
     AppLogger.d('Conversation ready: $_conversationId', tag: 'CHAT');
 
-    // Load existing messages from local DB into UI state
-    final existing = await _db.getMessages(_conversationId!);
-    state = existing.map((r) => ChatMessage.fromDb(r)).toList();
-    AppLogger.d('Loaded ${existing.length} messages from local DB',
-        tag: 'CHAT');
-
-    await _db.clearUnread(_conversationId!);
-
-    // Subscribe to the PROCESSED stream (fires after AuthNotifier saves to DB)
-    // This eliminates the race condition — no delay needed.
+    // ⚠️ Subscribe BEFORE loading from DB to avoid missing events that fire
+    // while we're awaiting the initial DB read (race-condition prevention).
     _msgSub?.cancel();
     _msgSub = _socket.processedMessageStream
         .where((senderId) => senderId == peerId)
         .listen((_) => _refreshFromDb());
+    AppLogger.d('processedMessageStream subscribed ✓', tag: 'CHAT');
 
+    // Load existing messages from local DB into UI state
+    await _refreshFromDb();
+
+    await _db.clearUnread(_conversationId!);
     AppLogger.i('Chat initialized ✓', tag: 'CHAT');
   }
 
@@ -427,8 +458,12 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     if (_conversationId == null) return;
     AppLogger.d('Refreshing UI from DB for conv:$_conversationId', tag: 'CHAT');
     final msgs = await _db.getMessages(_conversationId!);
-    state = msgs.map((r) => ChatMessage.fromDb(r)).toList();
-    AppLogger.d('UI refreshed — ${msgs.length} messages', tag: 'CHAT');
+    // Sort by the original send timestamp so pending messages from
+    // offline senders appear in the correct chronological position.
+    final sorted = msgs.map((r) => ChatMessage.fromDb(r)).toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    state = sorted;
+    AppLogger.d('UI refreshed — ${sorted.length} messages', tag: 'CHAT');
   }
 
   Future<void> sendText(String text) async {
@@ -459,16 +494,27 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       timestamp: DateTime.now(),
     );
 
-    state = [...state, msg];
+    // Insert in timestamp order (not just append) so the list stays sorted
+    // even if offline-queued messages from the peer were received first.
+    final updatedState = [...state, msg]
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    state = updatedState;
     AppLogger.v('Message added to UI state (status: sending)', tag: 'CHAT');
     await _saveMessageToDb(msg);
 
     try {
       AppLogger.d('Relaying message via socket...', tag: 'CHAT');
-      final status = await _socket.sendMessage(msg.toSocketJson());
-      final newStatus =
-          status == 'delivered' ? MessageStatus.delivered : MessageStatus.sent;
-      AppLogger.i('Message $msgId → $status', tag: 'CHAT');
+      final serverAck = await _socket.sendMessage(msg.toSocketJson());
+      // Server ACK means "message received by relay server" only.
+      // "delivered" here means server forwarded to recipient's socket
+      // (which may still be a stale/dead socket — not a real device receipt).
+      // We always set status to 'sent' here; true 'delivered' arrives later
+      // via the message:status socket event when the recipient device acks.
+      const newStatus = MessageStatus.sent;
+      AppLogger.i(
+        'Message $msgId → server:$serverAck (status: sent)',
+        tag: 'CHAT',
+      );
       await _db.updateMessageStatus(msgId, newStatus.name);
       await _db.updateConversationLastMessage(
         _conversationId!,
@@ -482,8 +528,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       AppLogger.e('Failed to send message $msgId', tag: 'CHAT', error: e);
       await _db.updateMessageStatus(msgId, MessageStatus.failed.name);
       state = state
-          .map((m) =>
-              m.id == msgId ? m.copyWith(status: MessageStatus.failed) : m)
+          .map(
+            (m) => m.id == msgId ? m.copyWith(status: MessageStatus.failed) : m,
+          )
           .toList();
     }
   }
@@ -494,16 +541,20 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     required String fileType,
   }) async {
     if (_peerPublicKey == null) {
-      AppLogger.w('Cannot send file — peer public key not available',
-          tag: 'CHAT');
+      AppLogger.w(
+        'Cannot send file — peer public key not available',
+        tag: 'CHAT',
+      );
       return;
     }
 
     final msgId = const Uuid().v4();
     final messageType = _getMessageType(fileType);
     final sizeKb = (fileBytes.length / 1024).toStringAsFixed(1);
-    AppLogger.i('Sending file: $fileName ($sizeKb KB) type:$fileType id:$msgId',
-        tag: 'CHAT');
+    AppLogger.i(
+      'Sending file: $fileName ($sizeKb KB) type:$fileType id:$msgId',
+      tag: 'CHAT',
+    );
 
     final msg = ChatMessage(
       id: msgId,
@@ -526,8 +577,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         recipientPublicKeyBase64: _peerPublicKey!,
       );
       AppLogger.d(
-          'File encrypted ✓ (${(encrypted.encryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
-          tag: 'CHAT');
+        'File encrypted ✓ (${(encrypted.encryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
+        tag: 'CHAT',
+      );
 
       AppLogger.d('Uploading encrypted file to relay server...', tag: 'CHAT');
       final fileId = await _api.uploadEncryptedFile(
@@ -541,8 +593,10 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       );
       AppLogger.i('File uploaded ✓ fileId:$fileId', tag: 'CHAT');
 
-      final msgWithFile =
-          msg.copyWith(fileId: fileId, status: MessageStatus.sent);
+      final msgWithFile = msg.copyWith(
+        fileId: fileId,
+        status: MessageStatus.sent,
+      );
 
       AppLogger.d('Saving original file locally...', tag: 'CHAT');
       final localPath = await _api.saveFileLocally(
@@ -563,8 +617,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     } catch (e) {
       AppLogger.e('Failed to send file $fileName', tag: 'CHAT', error: e);
       state = state
-          .map((m) =>
-              m.id == msgId ? m.copyWith(status: MessageStatus.failed) : m)
+          .map(
+            (m) => m.id == msgId ? m.copyWith(status: MessageStatus.failed) : m,
+          )
           .toList();
     }
   }
@@ -572,8 +627,10 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   Future<void> downloadFile(ChatMessage msg) async {
     if (msg.fileId == null || msg.localFilePath != null) return;
 
-    AppLogger.i('Downloading file: ${msg.fileName} (fileId:${msg.fileId})',
-        tag: 'CHAT');
+    AppLogger.i(
+      'Downloading file: ${msg.fileName} (fileId:${msg.fileId})',
+      tag: 'CHAT',
+    );
 
     try {
       AppLogger.d('Fetching encrypted bytes from relay server...', tag: 'CHAT');
@@ -581,8 +638,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         fileId: msg.fileId!,
       );
       AppLogger.d(
-          'Downloaded ${(encryptedBytes.length / 1024).toStringAsFixed(1)} KB encrypted',
-          tag: 'CHAT');
+        'Downloaded ${(encryptedBytes.length / 1024).toStringAsFixed(1)} KB encrypted',
+        tag: 'CHAT',
+      );
 
       AppLogger.d('Decrypting file...', tag: 'CHAT');
       final peerPubKey = _peerPublicKey!;
@@ -593,8 +651,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         senderPublicKeyBase64: peerPubKey,
       );
       AppLogger.d(
-          'File decrypted ✓ (${(decryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
-          tag: 'CHAT');
+        'File decrypted ✓ (${(decryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
+        tag: 'CHAT',
+      );
 
       AppLogger.d('Saving file locally...', tag: 'CHAT');
       final localPath = await _api.saveFileLocally(
@@ -609,31 +668,36 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
           .toList();
       AppLogger.i('File downloaded and saved: $localPath', tag: 'CHAT');
     } catch (e) {
-      AppLogger.e('Failed to download file ${msg.fileName}',
-          tag: 'CHAT', error: e);
+      AppLogger.e(
+        'Failed to download file ${msg.fileName}',
+        tag: 'CHAT',
+        error: e,
+      );
     }
   }
 
   Future<void> _saveMessageToDb(ChatMessage msg) async {
     final convId = _conversationId ?? await _db.getOrCreateConversation(peerId);
-    await _db.insertMessage(MessagesCompanion(
-      id: Value(msg.id),
-      conversationId: Value(convId),
-      senderId: Value(msg.senderId),
-      recipientId: Value(msg.recipientId),
-      type: Value(msg.type.name),
-      encryptedContent: Value(msg.encryptedContent),
-      iv: Value(msg.iv),
-      decryptedText: Value(msg.decryptedText),
-      fileId: Value(msg.fileId),
-      localFilePath: Value(msg.localFilePath),
-      fileName: Value(msg.fileName),
-      fileType: Value(msg.fileType),
-      fileSize: Value(msg.fileSize),
-      encryptedKey: Value(msg.encryptedKey),
-      status: Value(msg.status.name),
-      timestamp: Value(msg.timestamp.toIso8601String()),
-    ));
+    await _db.insertMessage(
+      MessagesCompanion(
+        id: Value(msg.id),
+        conversationId: Value(convId),
+        senderId: Value(msg.senderId),
+        recipientId: Value(msg.recipientId),
+        type: Value(msg.type.name),
+        encryptedContent: Value(msg.encryptedContent),
+        iv: Value(msg.iv),
+        decryptedText: Value(msg.decryptedText),
+        fileId: Value(msg.fileId),
+        localFilePath: Value(msg.localFilePath),
+        fileName: Value(msg.fileName),
+        fileType: Value(msg.fileType),
+        fileSize: Value(msg.fileSize),
+        encryptedKey: Value(msg.encryptedKey),
+        status: Value(msg.status.name),
+        timestamp: Value(msg.timestamp.toIso8601String()),
+      ),
+    );
   }
 
   MessageType _getMessageType(String mimeType) {
@@ -661,16 +725,17 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
 }
 
 final chatProvider =
-    StateNotifierProvider.family<ChatNotifier, List<ChatMessage>, String>(
-  (ref, peerId) {
-    final auth = ref.watch(authProvider);
-    return ChatNotifier(
-      peerId: peerId,
-      myId: auth.userId ?? '',
-      api: ref.watch(apiServiceProvider),
-      enc: ref.watch(encryptionServiceProvider),
-      socket: ref.watch(socketServiceProvider),
-      db: ref.watch(localDatabaseProvider),
-    );
-  },
-);
+    StateNotifierProvider.family<ChatNotifier, List<ChatMessage>, String>((
+      ref,
+      peerId,
+    ) {
+      final auth = ref.watch(authProvider);
+      return ChatNotifier(
+        peerId: peerId,
+        myId: auth.userId ?? '',
+        api: ref.watch(apiServiceProvider),
+        enc: ref.watch(encryptionServiceProvider),
+        socket: ref.watch(socketServiceProvider),
+        db: ref.watch(localDatabaseProvider),
+      );
+    });

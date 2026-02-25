@@ -3,20 +3,19 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../utils/app_logger.dart';
 
 typedef StatusCallback = void Function(String messageId, String status);
-typedef PresenceCallback = void Function(
-    String userId, bool isOnline, String? lastSeen);
+typedef PresenceCallback =
+    void Function(String userId, bool isOnline, String? lastSeen);
 typedef TypingCallback = void Function(String userId, bool isTyping);
 
 class SocketService {
   static const _tag = 'SOCKET';
 
-  // static const String _serverUrl = String.fromEnvironment(
-  //   'SERVER_URL',
-  //   defaultValue: 'http://192.168.0.183:3000',
+  static const String _serverUrl = String.fromEnvironment(
+    'SERVER_URL',
+    defaultValue: 'http://192.168.0.183:3000',
+  );
 
-  // );
-
-  static const String _serverUrl = 'http://18.219.24.19:3000';
+  // static const String _serverUrl = 'http://18.219.24.19:3000';
 
   IO.Socket? _socket;
   bool _isConnected = false;
@@ -83,15 +82,14 @@ class SocketService {
           .build(),
     );
 
-    AppLogger.d('Socket instance created — registering event handlers',
-        tag: _tag);
+    AppLogger.d(
+      'Socket instance created — registering event handlers',
+      tag: _tag,
+    );
 
     _socket!.onConnect((_) {
       _isConnected = true;
-      AppLogger.i(
-        '✅ SOCKET CONNECTED — id: ${_socket?.id}',
-        tag: _tag,
-      );
+      AppLogger.i('✅ SOCKET CONNECTED — id: ${_socket?.id}', tag: _tag);
     });
 
     _socket!.onDisconnect((reason) {
@@ -138,12 +136,22 @@ class SocketService {
         tag: _tag,
       );
       if (data is Map<String, dynamic>) {
+        final msgId = data['messageId'] as String?;
+
+        // ⚡ Immediately ACK at transport level — BEFORE any async processing.
+        // This tells the server "message reached the device" so it cancels
+        // the delivery timeout and does NOT re-queue the message.
+        if (msgId != null && _socket != null) {
+          _socket!.emit('message:transport_ack', {'messageId': msgId});
+          AppLogger.d('transport_ack sent for $msgId', tag: _tag);
+        }
+
         AppLogger.d(
           'message:receive parsed OK\n'
           '│ from    : ${data['senderId']}\n'
           '│ to      : ${data['recipientId']}\n'
           '│ type    : ${data['type']}\n'
-          '│ msgId   : ${data['messageId']}',
+          '│ msgId   : $msgId',
           tag: _tag,
         );
         _messageController.add(Map<String, dynamic>.from(data));
@@ -202,8 +210,9 @@ class SocketService {
     });
 
     AppLogger.d(
-        'All event handlers registered ✓ — socket is now auto-connecting',
-        tag: _tag);
+      'All event handlers registered ✓ — socket is now auto-connecting',
+      tag: _tag,
+    );
   }
 
   Future<String> sendMessage(Map<String, dynamic> messageData) async {
@@ -227,20 +236,24 @@ class SocketService {
 
     final completer = Completer<String>();
 
-    _socket!.emitWithAck('message:send', messageData, ack: (response) {
-      AppLogger.d(
-        'message:send ACK received — response: $response',
-        tag: _tag,
-      );
-      if (response is Map && response.containsKey('error')) {
-        AppLogger.e('Send failed: ${response['error']}', tag: _tag);
-        completer.completeError(response['error']);
-      } else {
-        final status = response['status'] as String? ?? 'sent';
-        AppLogger.i('Message $msgId → $status', tag: _tag);
-        completer.complete(status);
-      }
-    });
+    _socket!.emitWithAck(
+      'message:send',
+      messageData,
+      ack: (response) {
+        AppLogger.d(
+          'message:send ACK received — response: $response',
+          tag: _tag,
+        );
+        if (response is Map && response.containsKey('error')) {
+          AppLogger.e('Send failed: ${response['error']}', tag: _tag);
+          completer.completeError(response['error']);
+        } else {
+          final status = response['status'] as String? ?? 'sent';
+          AppLogger.i('Message $msgId → $status', tag: _tag);
+          completer.complete(status);
+        }
+      },
+    );
 
     return completer.future.timeout(
       const Duration(seconds: 10),
