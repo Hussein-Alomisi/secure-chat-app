@@ -29,6 +29,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(chatProvider(widget.peer.id).notifier).initialize();
+      // Scroll to bottom after initial load
+      _scrollToBottom();
     });
   }
 
@@ -166,6 +168,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final auth = ref.watch(authProvider);
     final messages = ref.watch(chatProvider(widget.peer.id));
     final myId = auth.userId ?? '';
+
+    // Auto-scroll when new messages arrive
+    ref.listen<List<ChatMessage>>(chatProvider(widget.peer.id), (prev, next) {
+      if (prev != null && next.length > prev.length) {
+        _scrollToBottom();
+      }
+    });
 
     // Parse peer avatar color
     Color peerColor;
