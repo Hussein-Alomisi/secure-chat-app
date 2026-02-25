@@ -201,11 +201,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
           AppLogger.d('STEP 4 ✓ conversation last-message updated',
               tag: 'AUTH');
 
-          // STEP 5: Ack
+          // STEP 5: Ack + notify ChatNotifier the DB is ready
           _socket.sendDeliveredAck(msg.id, msg.senderId);
+          _socket.notifyMessageProcessed(msg.senderId);
           AppLogger.i(
             '╔══ GLOBAL: msg ${msg.id} COMPLETE ✓ ══╗\n'
-            '│ saved to DB, ack sent\n'
+            '│ saved to DB, ack sent, UI notified\n'
             '╚════════════════════════════════════╝',
             tag: 'AUTH',
           );
@@ -371,7 +372,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   final LocalDatabase _db;
   String? _peerPublicKey;
   String? _conversationId;
-  StreamSubscription<Map<String, dynamic>>? _msgSub;
+  StreamSubscription<String>? _msgSub;
 
   ChatNotifier({
     required this.peerId,
@@ -412,27 +413,22 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
 
     await _db.clearUnread(_conversationId!);
 
-    // Subscribe to the global stream, filter for this peer only (for UI updates)
+    // Subscribe to the PROCESSED stream (fires after AuthNotifier saves to DB)
+    // This eliminates the race condition — no delay needed.
     _msgSub?.cancel();
-    _msgSub = _socket.messageStream
-        .where((data) => data['senderId'] == peerId)
-        .listen(_handleIncomingForUI);
+    _msgSub = _socket.processedMessageStream
+        .where((senderId) => senderId == peerId)
+        .listen((_) => _refreshFromDb());
 
     AppLogger.i('Chat initialized ✓', tag: 'CHAT');
   }
 
-  /// Called only for UI refresh — the message is already saved to DB
-  /// by AuthNotifier's global listener.
-  /// We wait briefly to let the async global listener finish writing to DB first.
-  void _handleIncomingForUI(Map<String, dynamic> data) {
-    AppLogger.d('UI refresh queued for msg from $peerId', tag: 'CHAT');
-    Future.delayed(const Duration(milliseconds: 500), _refreshFromDb);
-  }
-
   Future<void> _refreshFromDb() async {
     if (_conversationId == null) return;
+    AppLogger.d('Refreshing UI from DB for conv:$_conversationId', tag: 'CHAT');
     final msgs = await _db.getMessages(_conversationId!);
     state = msgs.map((r) => ChatMessage.fromDb(r)).toList();
+    AppLogger.d('UI refreshed — ${msgs.length} messages', tag: 'CHAT');
   }
 
   Future<void> sendText(String text) async {

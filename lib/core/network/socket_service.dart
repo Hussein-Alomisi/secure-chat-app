@@ -16,14 +16,27 @@ class SocketService {
 
   // );
 
-  static const String _serverUrl = 'http://18.191.182.0:3000';
+  static const String _serverUrl = 'http://18.219.24.19:3000';
 
   IO.Socket? _socket;
   bool _isConnected = false;
 
   final _messageController = StreamController<Map<String, dynamic>>.broadcast();
 
+  // Fires AFTER AuthNotifier has saved the message to DB — no race condition.
+  final _processedController = StreamController<String>.broadcast(); // senderId
+
   Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
+
+  /// Emits the senderId after a message is fully processed and stored in DB.
+  Stream<String> get processedMessageStream => _processedController.stream;
+
+  /// Called by AuthNotifier after each message is decrypted + saved to DB.
+  void notifyMessageProcessed(String senderId) {
+    if (!_processedController.isClosed) {
+      _processedController.add(senderId);
+    }
+  }
 
   StatusCallback? onMessageStatusChanged;
   PresenceCallback? onPresenceChanged;
@@ -278,6 +291,7 @@ class SocketService {
   void dispose() {
     AppLogger.d('SocketService.dispose()', tag: _tag);
     _messageController.close();
+    _processedController.close();
     disconnect();
   }
 }
