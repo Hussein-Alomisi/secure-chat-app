@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+// How long to allow for upload/download: supports up to 4.2 GB files.
+const Duration _kFileTransferTimeout = Duration(hours: 12);
+
 class ApiService {
   // static const String _serverUrl = String.fromEnvironment(
   //   'SERVER_URL',
@@ -19,8 +22,10 @@ class ApiService {
     _dio = Dio(BaseOptions(
       baseUrl: '$_serverUrl/api',
       connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 60),
-      sendTimeout: const Duration(seconds: 60),
+      // Upload/download of up to 4.2 GB needs generous timeouts.
+      // These apply per-request and are overridden per-call where needed.
+      receiveTimeout: _kFileTransferTimeout,
+      sendTimeout: _kFileTransferTimeout,
     ));
 
     // Interceptor: add Bearer token to all requests
@@ -83,10 +88,11 @@ class ApiService {
 
   // ── File Upload / Download ─────────────────────────────────────────────────
 
-  /// Upload an encrypted file to the relay server
-  /// Returns fileId assigned by server
+  /// Upload an encrypted file to the relay server using streaming (disk → network).
+  /// [encryptedFilePath] must be the path of the already-encrypted file on disk.
+  /// Returns the fileId assigned by server.
   Future<String> uploadEncryptedFile({
-    required Uint8List encryptedBytes,
+    required String encryptedFilePath, // ← path on disk, NOT bytes in memory
     required String recipientId,
     required String encryptedKey,
     required String iv,
@@ -94,10 +100,14 @@ class ApiService {
     required String originalName,
     required String messageId,
     void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
   }) async {
+    final file = File(encryptedFilePath);
+    final fileLength = await file.length();
+
     final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(
-        encryptedBytes,
+      'file': await MultipartFile.fromFile(
+        encryptedFilePath,
         filename: '${const Uuid().v4()}.enc',
         contentType: DioMediaType.parse('application/octet-stream'),
       ),
@@ -109,37 +119,47 @@ class ApiService {
       'messageId': messageId,
     });
 
+    debugPrint(
+        '[API] Uploading ${(fileLength / 1024 / 1024).toStringAsFixed(1)} MB from disk');
+
     final response = await _dio.post(
       '/files/upload',
       data: formData,
+      cancelToken: cancelToken,
+      options: Options(
+        sendTimeout: _kFileTransferTimeout,
+        receiveTimeout: const Duration(seconds: 30),
+      ),
       onSendProgress: onProgress,
     );
 
     return response.data['fileId'] as String;
   }
 
-  /// Download an encrypted file from the relay server
-  /// Returns local path of saved encrypted file
-  Future<Uint8List> downloadEncryptedFile({
+  /// Download an encrypted file from the relay server, streaming it directly
+  /// to a temp file on disk. Returns metadata + the local path of the saved file.
+  /// The CALLER is responsible for deleting the temp file after decryption.
+  Future<Map<String, dynamic>> downloadFileWithMeta({
     required String fileId,
     void Function(int received, int total)? onProgress,
+    CancelToken? cancelToken,
   }) async {
-    final response = await _dio.get<List<int>>(
+    final tempDir = await getTemporaryDirectory();
+    final savePath = '${tempDir.path}/${const Uuid().v4()}.enc.tmp';
+
+    debugPrint('[API] Streaming download → $savePath');
+
+    final response = await _dio.download(
       '/files/download/$fileId',
-      options: Options(responseType: ResponseType.bytes),
+      savePath,
+      cancelToken: cancelToken,
+      options: Options(
+        receiveTimeout: _kFileTransferTimeout,
+        headers: {
+          if (_jwtToken != null) 'Authorization': 'Bearer $_jwtToken',
+        },
+      ),
       onReceiveProgress: onProgress,
-    );
-
-    return Uint8List.fromList(response.data!);
-  }
-
-  /// Get encrypted AES key and IV from download response headers
-  Future<Map<String, String>> downloadFileWithMeta({
-    required String fileId,
-  }) async {
-    final response = await _dio.get<List<int>>(
-      '/files/download/$fileId',
-      options: Options(responseType: ResponseType.bytes),
     );
 
     final headers = response.headers;
@@ -150,7 +170,7 @@ class ApiService {
       'originalName':
           Uri.decodeComponent(headers.value('x-original-name') ?? 'file'),
       'messageId': headers.value('x-message-id') ?? '',
-      'bytes': String.fromCharCodes(response.data!),
+      'encryptedFilePath': savePath, // ← path on disk, NOT bytes in memory
     };
   }
 
@@ -168,5 +188,21 @@ class ApiService {
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(bytes);
     return file.path;
+  }
+
+  /// Copy a file from [sourceFilePath] to local storage without loading
+  /// the entire file into memory — suitable for large files.
+  Future<String> saveFileFromPath({
+    required String sourceFilePath,
+    required String fileName,
+    required String subFolder,
+  }) async {
+    final baseDir = await getApplicationDocumentsDirectory();
+    final dir = Directory('${baseDir.path}/securechat/$subFolder');
+    await dir.create(recursive: true);
+
+    final destPath = '${dir.path}/$fileName';
+    await File(sourceFilePath).copy(destPath);
+    return destPath;
   }
 }

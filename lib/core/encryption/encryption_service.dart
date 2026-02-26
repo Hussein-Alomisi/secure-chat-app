@@ -1,11 +1,112 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:convert/convert.dart';
+
+// ─── Top-level isolate functions ────────────────────────────────────────────
+// These MUST be top-level (not instance methods) so they can run in Isolate.run
+
+Future<Map<String, Uint8List>> _isolateEncryptFile(
+    Map<String, dynamic> args) async {
+  final fileBytes = args['fileBytes'] as Uint8List;
+  final privateKeyBytes = args['privateKeyBytes'] as Uint8List;
+  final recipientPubKeyBase64 = args['recipientPubKeyBase64'] as String;
+
+  final x25519 = X25519();
+  final aesGcm = AesGcm.with256bits();
+  final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
+
+  // Rebuild key pair inside isolate
+  final publicKey = await x25519.newKeyPairFromSeed(privateKeyBytes);
+  final recipientPubKey = SimplePublicKey(
+    base64Decode(recipientPubKeyBase64),
+    type: KeyPairType.x25519,
+  );
+
+  // Derive shared key
+  final sharedSecret = await x25519.sharedSecretKey(
+    keyPair: publicKey,
+    remotePublicKey: recipientPubKey,
+  );
+  final sharedKey = await hkdf.deriveKey(
+    secretKey: sharedSecret,
+    nonce: Uint8List(32),
+    info: Uint8List.fromList(utf8.encode('SecureChat-AES256GCM-v1')),
+  );
+
+  // Encrypt file with random key
+  final fileKey = await aesGcm.newSecretKey();
+  final secretBox = await aesGcm.encrypt(fileBytes, secretKey: fileKey);
+  final fileKeyBytes = await fileKey.extractBytes();
+  final cipherBytes = Uint8List.fromList(
+    secretBox.cipherText + secretBox.mac.bytes,
+  );
+
+  // Encrypt file key with shared key
+  final keyBox = await aesGcm.encrypt(fileKeyBytes, secretKey: sharedKey);
+  final encryptedKeyBytes = Uint8List.fromList(
+    keyBox.nonce + keyBox.cipherText + keyBox.mac.bytes,
+  );
+
+  return {
+    'encryptedBytes': cipherBytes,
+    'iv': Uint8List.fromList(secretBox.nonce),
+    'encryptedKey': encryptedKeyBytes,
+  };
+}
+
+Future<Uint8List> _isolateDecryptFile(Map<String, dynamic> args) async {
+  final encryptedBytes = args['encryptedBytes'] as Uint8List;
+  final ivBase64 = args['ivBase64'] as String;
+  final encryptedKeyBase64 = args['encryptedKeyBase64'] as String;
+  final privateKeyBytes = args['privateKeyBytes'] as Uint8List;
+  final senderPubKeyBase64 = args['senderPubKeyBase64'] as String;
+
+  final x25519 = X25519();
+  final aesGcm = AesGcm.with256bits();
+  final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
+
+  // Rebuild key pair inside isolate
+  final keyPair = await x25519.newKeyPairFromSeed(privateKeyBytes);
+  final senderPubKey = SimplePublicKey(
+    base64Decode(senderPubKeyBase64),
+    type: KeyPairType.x25519,
+  );
+
+  // Derive shared key
+  final sharedSecret = await x25519.sharedSecretKey(
+    keyPair: keyPair,
+    remotePublicKey: senderPubKey,
+  );
+  final sharedKey = await hkdf.deriveKey(
+    secretKey: sharedSecret,
+    nonce: Uint8List(32),
+    info: Uint8List.fromList(utf8.encode('SecureChat-AES256GCM-v1')),
+  );
+
+  // Decrypt file key
+  final encKeyBytes = base64Decode(encryptedKeyBase64);
+  final keyNonce = encKeyBytes.sublist(0, 12);
+  final keyCipherText = encKeyBytes.sublist(12, encKeyBytes.length - 16);
+  final keyMac = Mac(encKeyBytes.sublist(encKeyBytes.length - 16));
+  final keyBox = SecretBox(keyCipherText, nonce: keyNonce, mac: keyMac);
+  final fileKeyBytes = await aesGcm.decrypt(keyBox, secretKey: sharedKey);
+  final fileKey = SecretKey(fileKeyBytes);
+
+  // Decrypt file
+  final iv = base64Decode(ivBase64);
+  final cipherText = encryptedBytes.sublist(0, encryptedBytes.length - 16);
+  final mac = Mac(encryptedBytes.sublist(encryptedBytes.length - 16));
+  final fileBox = SecretBox(cipherText, nonce: iv, mac: mac);
+  final decryptedBytes = await aesGcm.decrypt(fileBox, secretKey: fileKey);
+  return Uint8List.fromList(decryptedBytes);
+}
+
+// ─── EncryptionService ──────────────────────────────────────────────────────
 
 /// Handles all E2EE operations using X25519 + AES-256-GCM
-/// 
+///
 /// Key Exchange Protocol:
 ///   1. Each user generates an X25519 key pair on first launch
 ///   2. Public key is registered with the server
@@ -129,71 +230,42 @@ class EncryptionService {
     return decrypted;
   }
 
-  /// Encrypt a file (Uint8List) for a recipient
-  /// Returns: { 'encryptedBytes': Uint8List, 'iv': base64, 'encryptedKey': base64 }
-  /// 
-  /// For files, we use a randomly generated AES key (not derived),
-  /// then encrypt that key with the recipient's shared secret.
+  /// Encrypt a file in a background isolate (UI stays responsive).
   Future<EncryptedFile> encryptFile({
     required Uint8List fileBytes,
     required String recipientPublicKeyBase64,
   }) async {
-    // Generate random AES key for this file
-    final fileKey = await _aesGcm.newSecretKey();
-    final secretBox = await _aesGcm.encrypt(fileBytes, secretKey: fileKey);
+    final privateKeyBytes = await _keyPair!.extractPrivateKeyBytes();
 
-    final fileKeyBytes = await fileKey.extractBytes();
-    final iv = secretBox.nonce;
-    final cipherBytes = Uint8List.fromList(
-      secretBox.cipherText + secretBox.mac.bytes,
-    );
-
-    // Encrypt file key with shared secret (so server cannot decrypt)
-    final sharedKey = await _deriveSharedKey(recipientPublicKeyBase64);
-    final keyBox = await _aesGcm.encrypt(
-      fileKeyBytes,
-      secretKey: sharedKey,
-    );
-    final encryptedKeyBytes = Uint8List.fromList(
-      keyBox.nonce + keyBox.cipherText + keyBox.mac.bytes,
-    );
+    final result = await Isolate.run(() => _isolateEncryptFile({
+          'fileBytes': fileBytes,
+          'privateKeyBytes': Uint8List.fromList(privateKeyBytes),
+          'recipientPubKeyBase64': recipientPublicKeyBase64,
+        }));
 
     return EncryptedFile(
-      encryptedBytes: cipherBytes,
-      ivBase64: base64Encode(iv),
-      encryptedKeyBase64: base64Encode(encryptedKeyBytes),
+      encryptedBytes: result['encryptedBytes']!,
+      ivBase64: base64Encode(result['iv']!),
+      encryptedKeyBase64: base64Encode(result['encryptedKey']!),
     );
   }
 
-  /// Decrypt a file received from sender
+  /// Decrypt a file in a background isolate (UI stays responsive).
   Future<Uint8List> decryptFile({
     required Uint8List encryptedBytes,
     required String ivBase64,
     required String encryptedKeyBase64,
     required String senderPublicKeyBase64,
   }) async {
-    // Decrypt file key using shared secret
-    final sharedKey = await _deriveSharedKey(senderPublicKeyBase64);
-    final encKeyBytes = base64Decode(encryptedKeyBase64);
+    final privateKeyBytes = await _keyPair!.extractPrivateKeyBytes();
 
-    // Format: nonce(12) + ciphertext + mac(16)
-    final keyNonce = encKeyBytes.sublist(0, 12);
-    final keyCipherText = encKeyBytes.sublist(12, encKeyBytes.length - 16);
-    final keyMac = Mac(encKeyBytes.sublist(encKeyBytes.length - 16));
-
-    final keyBox = SecretBox(keyCipherText, nonce: keyNonce, mac: keyMac);
-    final fileKeyBytes = await _aesGcm.decrypt(keyBox, secretKey: sharedKey);
-    final fileKey = SecretKey(fileKeyBytes);
-
-    // Decrypt file
-    final iv = base64Decode(ivBase64);
-    final rawBytes = encryptedBytes;
-    final cipherText = rawBytes.sublist(0, rawBytes.length - 16);
-    final mac = Mac(rawBytes.sublist(rawBytes.length - 16));
-
-    final fileBox = SecretBox(cipherText, nonce: iv, mac: mac);
-    final decryptedBytes = await _aesGcm.decrypt(fileBox, secretKey: fileKey);
-    return Uint8List.fromList(decryptedBytes);
+    return Isolate.run(() => _isolateDecryptFile({
+          'encryptedBytes': encryptedBytes,
+          'ivBase64': ivBase64,
+          'encryptedKeyBase64': encryptedKeyBase64,
+          'privateKeyBytes': Uint8List.fromList(privateKeyBytes),
+          'senderPubKeyBase64': senderPublicKeyBase64,
+        }));
   }
 }
 

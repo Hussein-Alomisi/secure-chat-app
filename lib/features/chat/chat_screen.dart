@@ -64,15 +64,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.any,
-      withData: true,
+      withData: false,
     );
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.first;
-    if (file.bytes == null) return;
+    if (file.path == null) return;
 
     await ref.read(chatProvider(widget.peer.id).notifier).sendFile(
-          fileBytes: file.bytes!,
+          filePath: file.path!,
           fileName: file.name,
           fileType: _getMimeType(file.extension ?? ''),
         );
@@ -86,12 +86,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
 
     if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final name = picked.name;
 
     await ref.read(chatProvider(widget.peer.id).notifier).sendFile(
-          fileBytes: bytes,
-          fileName: name,
+          filePath: picked.path,
+          fileName: picked.name,
           fileType: 'image/jpeg',
         );
     _scrollToBottom();
@@ -101,10 +99,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
     if (picked == null) return;
-    final bytes = await picked.readAsBytes();
 
     await ref.read(chatProvider(widget.peer.id).notifier).sendFile(
-          fileBytes: bytes,
+          filePath: picked.path,
           fileName: picked.name,
           fileType: 'video/mp4',
         );

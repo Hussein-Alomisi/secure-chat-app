@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../core/encryption/encryption_service.dart';
 import '../core/network/api_service.dart';
@@ -59,14 +60,15 @@ class AuthState {
     String? avatarColor,
     bool? isLoading,
     String? error,
-  }) => AuthState(
-    isLoggedIn: isLoggedIn ?? this.isLoggedIn,
-    userId: userId ?? this.userId,
-    userName: userName ?? this.userName,
-    avatarColor: avatarColor ?? this.avatarColor,
-    isLoading: isLoading ?? this.isLoading,
-    error: error,
-  );
+  }) =>
+      AuthState(
+        isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+        userId: userId ?? this.userId,
+        userName: userName ?? this.userName,
+        avatarColor: avatarColor ?? this.avatarColor,
+        isLoading: isLoading ?? this.isLoading,
+        error: error,
+      );
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -83,7 +85,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   StreamSubscription<Map<String, dynamic>>? _globalMsgSub;
 
   AuthNotifier(this._api, this._enc, this._socket, this._db)
-    : super(const AuthState());
+      : super(const AuthState());
 
   /// Called after connecting. Listens to ALL messages globally.
   void _startGlobalMessageListener(String myUserId) {
@@ -413,11 +415,11 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     required EncryptionService enc,
     required SocketService socket,
     required LocalDatabase db,
-  }) : _api = api,
-       _enc = enc,
-       _socket = socket,
-       _db = db,
-       super([]);
+  })  : _api = api,
+        _enc = enc,
+        _socket = socket,
+        _db = db,
+        super([]);
 
   Future<void> initialize() async {
     AppLogger.i('Initializing chat with peer: $peerId', tag: 'CHAT');
@@ -536,7 +538,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   }
 
   Future<void> sendFile({
-    required Uint8List fileBytes,
+    required String filePath,
     required String fileName,
     required String fileType,
   }) async {
@@ -550,9 +552,11 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
 
     final msgId = const Uuid().v4();
     final messageType = _getMessageType(fileType);
-    final sizeKb = (fileBytes.length / 1024).toStringAsFixed(1);
+    final sourceFile = File(filePath);
+    final fileSize = await sourceFile.length();
+    final sizeMb = (fileSize / (1024 * 1024)).toStringAsFixed(1);
     AppLogger.i(
-      'Sending file: $fileName ($sizeKb KB) type:$fileType id:$msgId',
+      'Sending file: $fileName ($sizeMb MB) type:$fileType id:$msgId',
       tag: 'CHAT',
     );
 
@@ -564,26 +568,36 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       type: messageType,
       fileName: fileName,
       fileType: fileType,
-      fileSize: fileBytes.length,
+      fileSize: fileSize,
       status: MessageStatus.sending,
       timestamp: DateTime.now(),
     );
     state = [...state, msg];
 
     try {
+      // Read file bytes from disk (only held in memory for encryption)
+      AppLogger.d('Reading file from disk...', tag: 'CHAT');
+      final fileBytes = await sourceFile.readAsBytes();
+
       AppLogger.d('Encrypting file...', tag: 'CHAT');
       final encrypted = await _enc.encryptFile(
         fileBytes: fileBytes,
         recipientPublicKeyBase64: _peerPublicKey!,
       );
+
+      // Write encrypted bytes to a temp file so upload streams from disk
+      final tempDir = await getTemporaryDirectory();
+      final tempEncPath = '${tempDir.path}/${const Uuid().v4()}.enc.tmp';
+      await File(tempEncPath).writeAsBytes(encrypted.encryptedBytes);
       AppLogger.d(
         'File encrypted ✓ (${(encrypted.encryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
         tag: 'CHAT',
       );
+      // encrypted.encryptedBytes reference is no longer needed after write
 
       AppLogger.d('Uploading encrypted file to relay server...', tag: 'CHAT');
       final fileId = await _api.uploadEncryptedFile(
-        encryptedBytes: encrypted.encryptedBytes,
+        encryptedFilePath: tempEncPath,
         recipientId: peerId,
         encryptedKey: encrypted.encryptedKeyBase64,
         iv: encrypted.ivBase64,
@@ -591,6 +605,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         originalName: fileName,
         messageId: msgId,
       );
+
+      // Clean up temp encrypted file after successful upload
+      await File(tempEncPath).delete().catchError((_) => File(tempEncPath));
       AppLogger.i('File uploaded ✓ fileId:$fileId', tag: 'CHAT');
 
       final msgWithFile = msg.copyWith(
@@ -598,9 +615,10 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         status: MessageStatus.sent,
       );
 
+      // Copy original file to local storage (file → file, no extra RAM)
       AppLogger.d('Saving original file locally...', tag: 'CHAT');
-      final localPath = await _api.saveFileLocally(
-        bytes: fileBytes,
+      final localPath = await _api.saveFileFromPath(
+        sourceFilePath: filePath,
         fileName: fileName,
         subFolder: _getFolderForType(messageType),
       );
@@ -633,22 +651,54 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     );
 
     try {
-      AppLogger.d('Fetching encrypted bytes from relay server...', tag: 'CHAT');
-      final encryptedBytes = await _api.downloadEncryptedFile(
-        fileId: msg.fileId!,
+      if (_peerPublicKey == null) {
+        throw Exception(
+          'Peer public key not loaded — cannot decrypt file for peer $peerId',
+        );
+      }
+
+      AppLogger.d(
+        'Fetching encrypted file + metadata from relay server...',
+        tag: 'CHAT',
       );
+      // Use downloadFileWithMeta to always get encryptedKey & iv from server
+      // headers, which is the authoritative source (msg fields may be null if
+      // the socket event didn't carry them or they weren't persisted to DB).
+      final meta = await _api.downloadFileWithMeta(fileId: msg.fileId!);
+
+      final encryptedKey = meta['encryptedKey'];
+      final iv = meta['iv'];
+
+      if (encryptedKey == null || encryptedKey.isEmpty) {
+        throw Exception(
+          'Server did not return encryptedKey header for file ${msg.fileId}',
+        );
+      }
+      if (iv == null || iv.isEmpty) {
+        throw Exception(
+          'Server did not return iv header for file ${msg.fileId}',
+        );
+      }
+
+      // meta['encryptedFilePath'] is a local temp file path streamed from server.
+      final encryptedFilePath = meta['encryptedFilePath'] as String;
+      final encryptedBytes = await File(encryptedFilePath).readAsBytes();
       AppLogger.d(
         'Downloaded ${(encryptedBytes.length / 1024).toStringAsFixed(1)} KB encrypted',
         tag: 'CHAT',
       );
 
+      // Delete temp encrypted file immediately after reading
+      await File(encryptedFilePath)
+          .delete()
+          .catchError((_) => File(encryptedFilePath));
+
       AppLogger.d('Decrypting file...', tag: 'CHAT');
-      final peerPubKey = _peerPublicKey!;
       final decryptedBytes = await _enc.decryptFile(
         encryptedBytes: encryptedBytes,
-        ivBase64: msg.iv ?? '',
-        encryptedKeyBase64: msg.encryptedKey ?? '',
-        senderPublicKeyBase64: peerPubKey,
+        ivBase64: iv,
+        encryptedKeyBase64: encryptedKey,
+        senderPublicKeyBase64: _peerPublicKey!,
       );
       AppLogger.d(
         'File decrypted ✓ (${(decryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
@@ -726,16 +776,16 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
 
 final chatProvider =
     StateNotifierProvider.family<ChatNotifier, List<ChatMessage>, String>((
-      ref,
-      peerId,
-    ) {
-      final auth = ref.watch(authProvider);
-      return ChatNotifier(
-        peerId: peerId,
-        myId: auth.userId ?? '',
-        api: ref.watch(apiServiceProvider),
-        enc: ref.watch(encryptionServiceProvider),
-        socket: ref.watch(socketServiceProvider),
-        db: ref.watch(localDatabaseProvider),
-      );
-    });
+  ref,
+  peerId,
+) {
+  final auth = ref.watch(authProvider);
+  return ChatNotifier(
+    peerId: peerId,
+    myId: auth.userId ?? '',
+    api: ref.watch(apiServiceProvider),
+    enc: ref.watch(encryptionServiceProvider),
+    socket: ref.watch(socketServiceProvider),
+    db: ref.watch(localDatabaseProvider),
+  );
+});
