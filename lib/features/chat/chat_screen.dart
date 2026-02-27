@@ -182,155 +182,158 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       peerColor = const Color(0xFF6C63FF);
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF13132B),
-        elevation: 0,
-        leadingWidth: 36,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: peerColor.withOpacity(0.2),
-              child: Text(
-                widget.peer.initials,
-                style: TextStyle(
-                  color: peerColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0D0D1A),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF13132B),
+          elevation: 0,
+          leadingWidth: 36,
+          title: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: peerColor.withOpacity(0.2),
+                child: Text(
+                  widget.peer.initials,
+                  style: TextStyle(
+                    color: peerColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.peer.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
-                Text(
-                  _peerIsTyping
-                      ? 'يكتب...'
-                      : widget.peer.isOnline
-                          ? 'متصل'
-                          : 'غير متصل',
-                  style: TextStyle(
-                    color: _peerIsTyping || widget.peer.isOnline
-                        ? const Color(0xFF4ADE80)
-                        : Colors.white38,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.lock_rounded,
-                color: Color(0xFF6C63FF), size: 18),
-            onPressed: () {},
-            tooltip: 'مشفر E2EE',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Message list
-          Expanded(
-            child: messages.isEmpty
-                ? _EmptyConversation(peerName: widget.peer.name)
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: messages.length,
-                    itemBuilder: (ctx, i) {
-                      final msg = messages[i];
-                      final isMe = msg.senderId == myId;
-                      return _MessageBubble(
-                        message: msg,
-                        isMe: isMe,
-                        onDownload:
-                            msg.localFilePath == null && msg.fileId != null
-                                ? () => ref
-                                    .read(chatProvider(widget.peer.id).notifier)
-                                    .downloadFile(msg)
-                                : null,
-                      );
-                    },
-                  ),
-          ),
-
-          // Input bar
-          Container(
-            color: const Color(0xFF13132B),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: SafeArea(
-              top: false,
-              child: Row(
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.attach_file_rounded,
-                        color: Colors.white54),
-                    onPressed: _showAttachmentMenu,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _textController,
-                      textDirection: TextDirection.rtl,
-                      style: const TextStyle(color: Colors.white),
-                      maxLines: 4,
-                      minLines: 1,
-                      onChanged: (val) {
-                        final typing = val.isNotEmpty;
-                        if (typing != _isTyping) {
-                          setState(() => _isTyping = typing);
-                          final socket = ref.read(socketServiceProvider);
-                          typing
-                              ? socket.sendTypingStart(widget.peer.id)
-                              : socket.sendTypingStop(widget.peer.id);
-                        }
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'اكتب رسالة...',
-                        hintStyle:
-                            TextStyle(color: Colors.white.withOpacity(0.3)),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.06),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _sendText,
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)],
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.send_rounded,
-                          color: Colors.white, size: 20),
+                  Text(widget.peer.name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  Text(
+                    _peerIsTyping
+                        ? 'يكتب...'
+                        : widget.peer.isOnline
+                            ? 'متصل'
+                            : 'غير متصل',
+                    style: TextStyle(
+                      color: _peerIsTyping || widget.peer.isOnline
+                          ? const Color(0xFF4ADE80)
+                          : Colors.white38,
+                      fontSize: 11,
                     ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        ],
+          // actions: [
+          //   IconButton(
+          //     icon: const Icon(Icons.lock_rounded,
+          //         color: Color(0xFF6C63FF), size: 18),
+          //     onPressed: () {},
+          //     tooltip: 'مشفر E2EE',
+          //   ),
+          // ],
+        ),
+        body: Column(
+          children: [
+            // Message list
+            Expanded(
+              child: messages.isEmpty
+                  ? _EmptyConversation(peerName: widget.peer.name)
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      itemCount: messages.length,
+                      itemBuilder: (ctx, i) {
+                        final msg = messages[i];
+                        final isMe = msg.senderId == myId;
+                        return _MessageBubble(
+                          message: msg,
+                          isMe: isMe,
+                          onDownload: msg.localFilePath == null &&
+                                  msg.fileId != null
+                              ? () => ref
+                                  .read(chatProvider(widget.peer.id).notifier)
+                                  .downloadFile(msg)
+                              : null,
+                        );
+                      },
+                    ),
+            ),
+
+            // Input bar
+            Container(
+              color: const Color(0xFF13132B),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: SafeArea(
+                top: false,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.attach_file_rounded,
+                          color: Colors.white54),
+                      onPressed: _showAttachmentMenu,
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _textController,
+                        textDirection: TextDirection.rtl,
+                        style: const TextStyle(color: Colors.white),
+                        maxLines: 4,
+                        minLines: 1,
+                        onChanged: (val) {
+                          final typing = val.isNotEmpty;
+                          if (typing != _isTyping) {
+                            setState(() => _isTyping = typing);
+                            final socket = ref.read(socketServiceProvider);
+                            typing
+                                ? socket.sendTypingStart(widget.peer.id)
+                                : socket.sendTypingStop(widget.peer.id);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'اكتب رسالة...',
+                          hintStyle:
+                              TextStyle(color: Colors.white.withOpacity(0.3)),
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.06),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _sendText,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)],
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.send_rounded,
+                            color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

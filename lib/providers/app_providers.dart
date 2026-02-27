@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,6 +34,10 @@ final localDatabaseProvider = Provider<LocalDatabase>((ref) {
   ref.onDispose(db.close);
   return db;
 });
+
+// ─── Theme Mode Provider ──────────────────────────────────────────────────────
+
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
 
 // ─── Auth State ───────────────────────────────────────────────────────────────
 
@@ -575,25 +580,22 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     state = [...state, msg];
 
     try {
-      // Read file bytes from disk (only held in memory for encryption)
-      AppLogger.d('Reading file from disk...', tag: 'CHAT');
-      final fileBytes = await sourceFile.readAsBytes();
-
       AppLogger.d('Encrypting file...', tag: 'CHAT');
-      final encrypted = await _enc.encryptFile(
-        fileBytes: fileBytes,
-        recipientPublicKeyBase64: _peerPublicKey!,
-      );
 
       // Write encrypted bytes to a temp file so upload streams from disk
       final tempDir = await getTemporaryDirectory();
       final tempEncPath = '${tempDir.path}/${const Uuid().v4()}.enc.tmp';
-      await File(tempEncPath).writeAsBytes(encrypted.encryptedBytes);
+
+      final encrypted = await _enc.encryptFile(
+        inputFilePath: filePath,
+        outputFilePath: tempEncPath,
+        recipientPublicKeyBase64: _peerPublicKey!,
+      );
+
       AppLogger.d(
-        'File encrypted ✓ (${(encrypted.encryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
+        'File encrypted ✓',
         tag: 'CHAT',
       );
-      // encrypted.encryptedBytes reference is no longer needed after write
 
       AppLogger.d('Uploading encrypted file to relay server...', tag: 'CHAT');
       final fileId = await _api.uploadEncryptedFile(
@@ -682,10 +684,17 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
 
       // meta['encryptedFilePath'] is a local temp file path streamed from server.
       final encryptedFilePath = meta['encryptedFilePath'] as String;
-      final encryptedBytes = await File(encryptedFilePath).readAsBytes();
-      AppLogger.d(
-        'Downloaded ${(encryptedBytes.length / 1024).toStringAsFixed(1)} KB encrypted',
-        tag: 'CHAT',
+
+      AppLogger.d('Decrypting file...', tag: 'CHAT');
+      final tempDir = await getTemporaryDirectory();
+      final tempDecPath = '${tempDir.path}/${const Uuid().v4()}.dec.tmp';
+
+      await _enc.decryptFile(
+        inputFilePath: encryptedFilePath,
+        outputFilePath: tempDecPath,
+        ivBase64: iv,
+        encryptedKeyBase64: encryptedKey,
+        senderPublicKeyBase64: _peerPublicKey!,
       );
 
       // Delete temp encrypted file immediately after reading
@@ -693,24 +702,20 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
           .delete()
           .catchError((_) => File(encryptedFilePath));
 
-      AppLogger.d('Decrypting file...', tag: 'CHAT');
-      final decryptedBytes = await _enc.decryptFile(
-        encryptedBytes: encryptedBytes,
-        ivBase64: iv,
-        encryptedKeyBase64: encryptedKey,
-        senderPublicKeyBase64: _peerPublicKey!,
-      );
       AppLogger.d(
-        'File decrypted ✓ (${(decryptedBytes.length / 1024).toStringAsFixed(1)} KB)',
+        'File decrypted ✓',
         tag: 'CHAT',
       );
 
       AppLogger.d('Saving file locally...', tag: 'CHAT');
-      final localPath = await _api.saveFileLocally(
-        bytes: decryptedBytes,
+      final localPath = await _api.saveFileFromPath(
+        sourceFilePath: tempDecPath,
         fileName: msg.fileName ?? 'file',
         subFolder: _getFolderForType(msg.type),
       );
+
+      // Clean up temp decrypted file
+      await File(tempDecPath).delete().catchError((_) => File(tempDecPath));
 
       await _db.updateMessageLocalPath(msg.id, localPath);
       state = state

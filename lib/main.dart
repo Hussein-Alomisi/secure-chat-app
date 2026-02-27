@@ -35,11 +35,14 @@ class _SecureChatAppState extends ConsumerState<SecureChatApp> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
       title: 'SecureChat',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
+      themeMode: themeMode,
+      // ── Dark Theme ────────────────────────────────────────────────────────
+      darkTheme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0D0D1A),
         colorScheme: const ColorScheme.dark(
@@ -56,6 +59,29 @@ class _SecureChatAppState extends ConsumerState<SecureChatApp> {
           iconTheme: IconThemeData(color: Colors.white),
           titleTextStyle: TextStyle(
             color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      // ── Light Theme ───────────────────────────────────────────────────────
+      theme: ThemeData(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF4F4FF),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF6C63FF),
+          secondary: Color(0xFF3B82F6),
+          surface: Colors.white,
+        ),
+        textTheme: GoogleFonts.cairoTextTheme(
+          ThemeData.light().textTheme,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Color(0xFF1A1A2E)),
+          titleTextStyle: TextStyle(
+            color: Color(0xFF1A1A2E),
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
