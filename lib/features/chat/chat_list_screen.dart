@@ -54,11 +54,11 @@ class ChatListScreen extends ConsumerWidget {
             ],
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.shield_outlined, color: Color(0xFF6C63FF)),
-              onPressed: () => _showSecurityInfo(context),
-              tooltip: 'معلومات الأمان',
-            ),
+            // IconButton(
+            //   icon: const Icon(Icons.shield_outlined, color: Color(0xFF6C63FF)),
+            //   onPressed: () => _showSecurityInfo(context),
+            //   tooltip: 'معلومات الأمان',
+            // ),
             // Consumer(
             //   builder: (context, ref, _) {
             //     final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;

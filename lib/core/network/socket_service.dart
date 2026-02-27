@@ -10,12 +10,12 @@ typedef TypingCallback = void Function(String userId, bool isTyping);
 class SocketService {
   static const _tag = 'SOCKET';
 
-  static const String _serverUrl = String.fromEnvironment(
-    'SERVER_URL',
-    defaultValue: 'http://192.168.0.183:3000',
-  );
+  // static const String _serverUrl = String.fromEnvironment(
+  //   'SERVER_URL',
+  //   defaultValue: 'http://192.168.0.183:3000',
+  // );
 
-  // static const String _serverUrl = 'http://18.219.24.19:3000';
+  static const String _serverUrl = 'http://18.219.24.19:3000';
 
   IO.Socket? _socket;
   bool _isConnected = false;

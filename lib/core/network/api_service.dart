@@ -9,11 +9,11 @@ import 'package:uuid/uuid.dart';
 const Duration _kFileTransferTimeout = Duration(hours: 12);
 
 class ApiService {
-  static const String _serverUrl = String.fromEnvironment(
-    'SERVER_URL',
-    defaultValue: 'http://192.168.0.183:3000',
-  );
-  // static const String _serverUrl = 'http://18.219.24.19:3000';
+  // static const String _serverUrl = String.fromEnvironment(
+  //   'SERVER_URL',
+  //   defaultValue: 'http://192.168.0.183:3000',
+  // );
+  static const String _serverUrl = 'http://18.219.24.19:3000';
 
   late final Dio _dio;
   String? _jwtToken;

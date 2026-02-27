@@ -164,7 +164,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final messages = ref.watch(chatProvider(widget.peer.id));
+    final usersAsync = ref.watch(usersProvider);
     final myId = auth.userId ?? '';
+
+    // Watch for real-time presence/status updates from usersProvider
+    final currentPeer = usersAsync.maybeWhen(
+      data: (users) => users.firstWhere((u) => u.id == widget.peer.id,
+          orElse: () => widget.peer),
+      orElse: () => widget.peer,
+    );
 
     // Auto-scroll when new messages arrive
     ref.listen<List<ChatMessage>>(chatProvider(widget.peer.id), (prev, next) {
@@ -216,11 +224,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   Text(
                     _peerIsTyping
                         ? 'يكتب...'
-                        : widget.peer.isOnline
+                        : currentPeer.isOnline
                             ? 'متصل'
-                            : 'غير متصل',
+                            : (currentPeer.lastSeen != null
+                                ? 'آخر ظهور ${currentPeer.lastSeen}'
+                                : 'غير متصل'),
                     style: TextStyle(
-                      color: _peerIsTyping || widget.peer.isOnline
+                      color: _peerIsTyping || currentPeer.isOnline
                           ? const Color(0xFF4ADE80)
                           : Colors.white38,
                       fontSize: 11,
@@ -711,9 +721,23 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
       appBar: AppBar(backgroundColor: Colors.black),
       body: Center(
         child: _controller.value.isInitialized
-            ? AspectRatio(
-                aspectRatio: _controller.value.aspectRatio,
-                child: VideoPlayer(_controller),
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio,
+                    child: VideoPlayer(_controller),
+                  ),
+                  VideoProgressIndicator(
+                    _controller,
+                    allowScrubbing: true,
+                    colors: const VideoProgressColors(
+                      playedColor: Colors.deepPurpleAccent,
+                      bufferedColor: Colors.grey,
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
+                ],
               )
             : const CircularProgressIndicator(color: Colors.white),
       ),

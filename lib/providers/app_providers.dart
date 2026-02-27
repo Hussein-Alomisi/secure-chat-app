@@ -394,10 +394,50 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 
 // ─── Users Provider ───────────────────────────────────────────────────────────
 
-final usersProvider = FutureProvider<List<AppUserModel>>((ref) async {
-  final api = ref.watch(apiServiceProvider);
-  final rawUsers = await api.getUsers();
-  return rawUsers.map((u) => AppUserModel.fromJson(u)).toList();
+class UsersNotifier extends StateNotifier<AsyncValue<List<AppUserModel>>> {
+  final ApiService _api;
+  final SocketService _socket;
+
+  UsersNotifier(this._api, this._socket) : super(const AsyncValue.loading()) {
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final rawUsers = await _api.getUsers();
+      final users = rawUsers.map((u) => AppUserModel.fromJson(u)).toList();
+      state = AsyncValue.data(users);
+
+      _socket.onPresenceChanged = (userId, isOnline, lastSeen) {
+        if (state is AsyncData<List<AppUserModel>>) {
+          final currentUsers = state.value!;
+          state = AsyncValue.data(
+            currentUsers.map((u) {
+              if (u.id == userId) {
+                return u.copyWith(isOnline: isOnline, lastSeen: lastSeen);
+              }
+              return u;
+            }).toList(),
+          );
+        }
+      };
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncValue.loading();
+    await _init();
+  }
+}
+
+final usersProvider =
+    StateNotifierProvider<UsersNotifier, AsyncValue<List<AppUserModel>>>((ref) {
+  return UsersNotifier(
+    ref.watch(apiServiceProvider),
+    ref.watch(socketServiceProvider),
+  );
 });
 
 // ─── Chat Provider ────────────────────────────────────────────────────────────
