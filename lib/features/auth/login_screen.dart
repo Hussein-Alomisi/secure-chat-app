@@ -14,6 +14,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _userIdController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isBiometricEnabled = false;
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
@@ -26,6 +27,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _animController.forward();
+
+    _checkBiometricStatus();
+  }
+
+  Future<void> _checkBiometricStatus() async {
+    final biometric = ref.read(biometricServiceProvider);
+    final isEnabled = await biometric.isBiometricEnabled();
+    if (mounted) {
+      setState(() {
+        _isBiometricEnabled = isEnabled;
+      });
+    }
   }
 
   @override
@@ -193,6 +206,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    // Biometric alternative
+                    const Text(
+                      'أو',
+                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: authState.isLoading
+                          ? null
+                          : () {
+                              if (_isBiometricEnabled) {
+                                ref
+                                    .read(authProvider.notifier)
+                                    .loginWithBiometrics();
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    // make the snackbar design similar to the app design
+                                    backgroundColor: Color(0xFF13132B),
+                                    content: Text(
+                                        style: TextStyle(color: Colors.white),
+                                        'يرجى تسجيل الدخول أولاً لتفعيل البصمة لتسجيل الدخول السريع لاحقاً.'),
+                                  ),
+                                );
+                              }
+                            },
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF13132B),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: const Color(0xFF6C63FF).withOpacity(0.5)),
+                        ),
+                        child: Icon(
+                          Icons.fingerprint_rounded,
+                          color: authState.isLoading
+                              ? Colors.white38
+                              : (_isBiometricEnabled
+                                  ? const Color(0xFF4ADE80)
+                                  : const Color(0xFF6C63FF)),
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
                     const _SecurityBadge(),
                   ],
                 ),

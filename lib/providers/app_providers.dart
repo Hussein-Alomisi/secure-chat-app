@@ -12,11 +12,16 @@ import '../core/database/local_database.dart';
 import '../core/models/chat_message.dart';
 import '../core/utils/app_logger.dart';
 import 'package:drift/drift.dart';
+import '../core/auth/biometric_service.dart';
 
 // ─── Service Providers (Singletons) ──────────────────────────────────────────
 
 final encryptionServiceProvider = Provider<EncryptionService>((ref) {
   return EncryptionService();
+});
+
+final biometricServiceProvider = Provider<BiometricService>((ref) {
+  return BiometricService();
 });
 
 final apiServiceProvider = Provider<ApiService>((ref) {
@@ -81,6 +86,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final EncryptionService _enc;
   final SocketService _socket;
   final LocalDatabase _db;
+  final BiometricService _biometricService;
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
@@ -89,7 +95,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // regardless of which screen is open.
   StreamSubscription<Map<String, dynamic>>? _globalMsgSub;
 
-  AuthNotifier(this._api, this._enc, this._socket, this._db)
+  AuthNotifier(
+      this._api, this._enc, this._socket, this._db, this._biometricService)
       : super(const AuthState());
 
   /// Called after connecting. Listens to ALL messages globally.
@@ -297,6 +304,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (token != null && userId != null) {
       AppLogger.i('Found saved session — userId: $userId', tag: 'AUTH');
+
+      // Check if biometric login is enabled for this app
+      final isBiometricEnabled = await _biometricService.isBiometricEnabled();
+      if (isBiometricEnabled) {
+        AppLogger.i('Biometric is enabled. Requesting authentication...',
+            tag: 'AUTH');
+        final authenticated = await _biometricService
+            .authenticate('قم بتأكيد هويتك لفتح التطبيق');
+        if (!authenticated) {
+          AppLogger.w(
+              'Biometric authentication failed or canceled. Staying on login screen.',
+              tag: 'AUTH');
+          // Important: We do not clear the tokens here so they can try again or use the password.
+          // By leaving the state as not logged in, they stay on the LoginScreen.
+          return;
+        }
+      }
+
       _api.setToken(token);
       await _enc.initialize();
       AppLogger.d('Encryption keys loaded', tag: 'AUTH');
@@ -371,13 +396,46 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> loginWithBiometrics() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final creds = await _biometricService.getSavedCredentials();
+      if (creds == null) {
+        state = state.copyWith(
+            isLoading: false, error: 'البصمة غير متوفرة أو غير مفعلة');
+        return;
+      }
+
+      final authenticated =
+          await _biometricService.authenticate('تسجيل الدخول باستخدام البصمة');
+      if (authenticated) {
+        await login(creds['userId']!, creds['password']!);
+      } else {
+        state =
+            state.copyWith(isLoading: false, error: 'فشلت المصادقة بالبصمة');
+      }
+    } catch (e) {
+      AppLogger.e('Biometric login failed', tag: 'AUTH', error: e);
+      state = state.copyWith(
+          isLoading: false, error: 'حدث خطأ أثناء تسجيل الدخول بالبصمة');
+    }
+  }
+
   Future<void> logout() async {
     AppLogger.i('Logging out user: ${state.userId}', tag: 'AUTH');
     await _globalMsgSub?.cancel();
     _globalMsgSub = null;
-    _socket.disconnect();
+
+    await _biometricService
+        .disableBiometric(); // <--- FIX: Disable biometric on logout
+
+    await _storage.delete(key: 'jwt_token');
+    await _storage.delete(key: 'user_id');
+    await _storage.delete(key: 'user_name');
+    await _storage.delete(key: 'avatar_color');
     _api.clearToken();
-    await _storage.deleteAll();
+    _socket.disconnect();
+
     state = const AuthState();
     AppLogger.i('Logout complete — all credentials cleared', tag: 'AUTH');
   }
@@ -389,6 +447,7 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
     ref.watch(encryptionServiceProvider),
     ref.watch(socketServiceProvider),
     ref.watch(localDatabaseProvider),
+    ref.watch(biometricServiceProvider),
   );
 });
 

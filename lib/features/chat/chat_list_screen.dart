@@ -54,6 +54,12 @@ class ChatListScreen extends ConsumerWidget {
             ],
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.fingerprint_rounded,
+                  color: Color(0xFF6C63FF)),
+              onPressed: () => _showBiometricBottomSheet(context, ref),
+              tooltip: 'إعداد البصمة',
+            ),
             // IconButton(
             //   icon: const Icon(Icons.shield_outlined, color: Color(0xFF6C63FF)),
             //   onPressed: () => _showSecurityInfo(context),
@@ -195,6 +201,195 @@ class ChatListScreen extends ConsumerWidget {
                   ),
                 )),
             const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBiometricBottomSheet(BuildContext context, WidgetRef ref) async {
+    final biometric = ref.read(biometricServiceProvider);
+    final isAvailable = await biometric.isBiometricAvailable();
+    final isEnabled = await biometric.isBiometricEnabled();
+
+    if (!context.mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF13132B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Icon(
+                Icons.fingerprint_rounded,
+                color: isEnabled
+                    ? const Color(0xFF4ADE80)
+                    : const Color(0xFF6C63FF),
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'تسجيل الدخول بالبصمة',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isAvailable
+                    ? (isEnabled
+                        ? 'البصمة مفعلة لتسجيل الدخول السريع'
+                        : 'قم بتفعيل البصمة لتسجيل الدخول بأمان وسرعة')
+                    : 'جهازك لا يدعم البصمة أو غير معدّة حالياً',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5), fontSize: 13),
+              ),
+              const SizedBox(height: 24),
+              if (isAvailable)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isEnabled
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFF6C63FF),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () async {
+                    if (isEnabled) {
+                      await biometric.disableBiometric();
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('تم إيقاف البصمة بنجاح')),
+                        );
+                      }
+                    } else {
+                      final authenticated = await biometric
+                          .authenticate('قم بتأكيد البصمة لتفعيلها');
+                      if (authenticated) {
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _showPasswordPrompt(context, ref);
+                      }
+                    }
+                  },
+                  child: Text(isEnabled ? 'إيقاف البصمة' : 'تفعيل البصمة',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPasswordPrompt(BuildContext context, WidgetRef ref) {
+    final passwordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF13132B),
+          title: const Text('تأكيد كلمة المرور',
+              style: TextStyle(color: Colors.white)),
+          content: TextField(
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.right,
+            controller: passwordController,
+            obscureText: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintTextDirection: TextDirection.rtl,
+              hintText: 'كلمة المرور الحالية',
+              hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.06),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child:
+                  const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C63FF)),
+              onPressed: () async {
+                final pwd = passwordController.text.trim();
+                if (pwd.isEmpty) return;
+
+                final auth = ref.read(authProvider);
+                final api = ref.read(apiServiceProvider);
+
+                // We need to locally check via api login or somehow if password is correct.
+                // Since we don't hold the plain password anywhere, we make a quick validation call to ensure it's not a fake password
+                // before persisting it as our 'fast login' password!
+                try {
+                  // We use the already stored public key (we could fetch it again but let's assume valid)
+                  final encService = ref.read(encryptionServiceProvider);
+                  final publicKey = await encService.getPublicKeyBase64();
+
+                  // Show loading indicator here or just do it in the background
+                  await api.login(
+                    userId: auth.userId!,
+                    password: pwd,
+                    publicKey: publicKey,
+                  );
+
+                  // If this point is reached, the password is correct!
+                  await ref
+                      .read(biometricServiceProvider)
+                      .enableBiometric(auth.userId!, pwd);
+
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          backgroundColor: Color(0xFF13132B),
+                          content: Text(
+                            'تم تفعيل البصمة بنجاح',
+                            style: TextStyle(color: Colors.white),
+                          )),
+                    );
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('كلمة المرور غير صحيحة')),
+                    );
+                  }
+                }
+              },
+              child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+            ),
           ],
         ),
       ),

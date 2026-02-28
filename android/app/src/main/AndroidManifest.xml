@@ -21,6 +21,9 @@
     <!-- Vibrate for notifications -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
+    <!-- Biometric Authentication -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+
     <application
         android:label="SecureChat"
         android:name="${applicationName}"
