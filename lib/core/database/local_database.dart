@@ -48,6 +48,7 @@ class Messages extends Table {
   TextColumn get encryptedKey =>
       text().nullable()(); // encrypted AES key for file
   IntColumn get audioDuration => integer().nullable()(); // seconds (audio msgs)
+  BoolColumn get isForwarded => boolean().withDefault(const Constant(false))();
   TextColumn get status => text().withDefault(const Constant('sending'))();
   // 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
   TextColumn get timestamp => text()();
@@ -63,7 +64,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,6 +79,12 @@ class LocalDatabase extends _$LocalDatabase {
             // Add audioDuration column for voice messages
             await migrator.database.customStatement(
               'ALTER TABLE messages ADD COLUMN audio_duration INTEGER;',
+            );
+          }
+          if (from < 4) {
+            // Add isForwarded column
+            await migrator.database.customStatement(
+              'ALTER TABLE messages ADD COLUMN is_forwarded INTEGER DEFAULT 0;',
             );
           }
         },

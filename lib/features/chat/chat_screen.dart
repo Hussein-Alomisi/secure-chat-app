@@ -26,8 +26,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isTyping = false;
+
   // ignore: prefer_final_fields
   bool _peerIsTyping = false;
+
+  // ─── Multi-select state ────────────────────────────────────────────────────
+  final Set<String> _selectedMessageIds = {};
+  bool get _isSelectionMode => _selectedMessageIds.isNotEmpty;
 
   // ─── Voice recording state ─────────────────────────────────────────────────
   final _voiceRecorder = VoiceRecorderService();
@@ -327,97 +332,270 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     return Directionality(
       textDirection: TextDirection.ltr,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D1A),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF13132B),
-          elevation: 0,
-          leadingWidth: 36,
-          title: Row(
+      child: PopScope(
+        canPop: !_isSelectionMode,
+        onPopInvoked: (didPop) {
+          if (!didPop && _isSelectionMode) {
+            setState(() => _selectedMessageIds.clear());
+          }
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFF0D0D1A),
+          appBar: _isSelectionMode
+              ? _buildSelectionAppBar(context, messages)
+              : _buildNormalAppBar(peerColor, currentPeer),
+          body: Column(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: peerColor.withOpacity(0.2),
-                child: Text(
-                  widget.peer.initials,
-                  style: TextStyle(
-                    color: peerColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
+              // Message list
+              Expanded(
+                child: messages.isEmpty
+                    ? _EmptyConversation(peerName: widget.peer.name)
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        itemCount: messages.length,
+                        itemBuilder: (ctx, i) {
+                          final msg = messages[i];
+                          final isMe = msg.senderId == myId;
+                          final isSelected =
+                              _selectedMessageIds.contains(msg.id);
+
+                          return GestureDetector(
+                            onLongPress: () {
+                              if (!_isSelectionMode) {
+                                setState(() => _selectedMessageIds.add(msg.id));
+                              }
+                            },
+                            onTap: () {
+                              if (_isSelectionMode) {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedMessageIds.remove(msg.id);
+                                  } else {
+                                    _selectedMessageIds.add(msg.id);
+                                  }
+                                });
+                              }
+                            },
+                            child: _MessageBubble(
+                              message: msg,
+                              isMe: isMe,
+                              isSelected: isSelected,
+                              onDownload: msg.localFilePath == null &&
+                                      msg.fileId != null
+                                  ? () => ref
+                                      .read(
+                                          chatProvider(widget.peer.id).notifier)
+                                      .downloadFile(msg)
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.peer.name,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600)),
-                  Text(
-                    _peerIsTyping
-                        ? 'يكتب...'
-                        : currentPeer.isOnline
-                            ? 'متصل'
-                            : (currentPeer.lastSeen != null
-                                ? 'آخر ظهور ${currentPeer.lastSeen}'
-                                : 'غير متصل'),
-                    style: TextStyle(
-                      color: _peerIsTyping || currentPeer.isOnline
-                          ? const Color(0xFF4ADE80)
-                          : Colors.white38,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+
+              // Input bar
+              Container(
+                color: const Color(0xFF13132B),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: SafeArea(
+                  top: false,
+                  child: _isSelectionMode
+                      ? const SizedBox.shrink() // Hide input when selecting
+                      : (_isRecording
+                          ? _buildRecordingBar()
+                          : _buildNormalInputBar()),
+                ),
               ),
             ],
           ),
         ),
-        body: Column(
-          children: [
-            // Message list
-            Expanded(
-              child: messages.isEmpty
-                  ? _EmptyConversation(peerName: widget.peer.name)
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      itemCount: messages.length,
-                      itemBuilder: (ctx, i) {
-                        final msg = messages[i];
-                        final isMe = msg.senderId == myId;
-                        return _MessageBubble(
-                          message: msg,
-                          isMe: isMe,
-                          onDownload: msg.localFilePath == null &&
-                                  msg.fileId != null
-                              ? () => ref
-                                  .read(chatProvider(widget.peer.id).notifier)
-                                  .downloadFile(msg)
-                              : null,
-                        );
-                      },
-                    ),
-            ),
+      ),
+    );
+  }
 
-            // Input bar
-            Container(
-              color: const Color(0xFF13132B),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: SafeArea(
-                top: false,
-                child: _isRecording
-                    ? _buildRecordingBar()
-                    : _buildNormalInputBar(),
+  AppBar _buildNormalAppBar(Color peerColor, AppUserModel currentPeer) {
+    return AppBar(
+      backgroundColor: const Color(0xFF13132B),
+      elevation: 0,
+      leadingWidth: 36,
+      title: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: peerColor.withOpacity(0.2),
+            child: Text(
+              widget.peer.initials,
+              style: TextStyle(
+                color: peerColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
               ),
             ),
-          ],
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.peer.name,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
+              Text(
+                _peerIsTyping
+                    ? 'يكتب...'
+                    : currentPeer.isOnline
+                        ? 'متصل'
+                        : (currentPeer.lastSeen != null
+                            ? 'آخر ظهور ${currentPeer.lastSeen}'
+                            : 'غير متصل'),
+                style: TextStyle(
+                  color: _peerIsTyping || currentPeer.isOnline
+                      ? const Color(0xFF4ADE80)
+                      : Colors.white38,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  AppBar _buildSelectionAppBar(
+      BuildContext context, List<ChatMessage> allMessages) {
+    final selectedMessages =
+        allMessages.where((m) => _selectedMessageIds.contains(m.id)).toList();
+
+    final canCopy = selectedMessages.isNotEmpty &&
+        selectedMessages.every(
+            (m) => m.type == MessageType.text && m.decryptedText != null);
+
+    return AppBar(
+      backgroundColor: const Color(0xFF6C63FF),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close_rounded, color: Colors.white),
+        onPressed: () => setState(() => _selectedMessageIds.clear()),
+      ),
+      title: Text(
+        '${_selectedMessageIds.length}',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
         ),
       ),
+      actions: [
+        if (canCopy)
+          IconButton(
+            icon: const Icon(Icons.copy_rounded, color: Colors.white),
+            onPressed: () {
+              final combinedText =
+                  selectedMessages.map((m) => m.decryptedText).join('\n\n');
+              Clipboard.setData(ClipboardData(text: combinedText));
+              setState(() => _selectedMessageIds.clear());
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('تم نسخ النصوص المحددة',
+                      style: TextStyle(color: Colors.white)),
+                  backgroundColor: Color(0xFF6C63FF),
+                ),
+              );
+            },
+          ),
+        IconButton(
+          icon: const Icon(Icons.reply_rounded, color: Colors.white),
+          onPressed: () => _showForwardDialog(context, selectedMessages),
+        ),
+      ],
+    );
+  }
+
+  void _showForwardDialog(
+      BuildContext context, List<ChatMessage> messagesToForward) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF13132B),
+          title: const Text('تحويل إلى', style: TextStyle(color: Colors.white)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Consumer(
+              builder: (context, ref, child) {
+                final usersAsync = ref.watch(usersProvider);
+                return usersAsync.when(
+                  data: (users) {
+                    final auth = ref.read(authProvider);
+                    final otherUsers =
+                        users.where((u) => u.id != auth.userId).toList();
+                    if (otherUsers.isEmpty) {
+                      return const Text('لا يوجد مستخدمين قمت بمحادثتهم بعد',
+                          style: TextStyle(color: Colors.white54));
+                    }
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: otherUsers.length,
+                      itemBuilder: (context, i) {
+                        final u = otherUsers[i];
+                        Color peerColor;
+                        try {
+                          peerColor = Color(int.parse(
+                              u.avatarColor.replaceFirst('#', '0xFF')));
+                        } catch (_) {
+                          peerColor = const Color(0xFF6C63FF);
+                        }
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: peerColor.withOpacity(0.2),
+                            child: Text(
+                              u.initials,
+                              style: TextStyle(
+                                  color: peerColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          title: Text(u.name,
+                              style: const TextStyle(color: Colors.white)),
+                          onTap: () {
+                            Navigator.pop(ctx); // Close dialog
+                            for (final msg in messagesToForward) {
+                              ref
+                                  .read(chatProvider(u.id).notifier)
+                                  .forwardMessage(msg);
+                            }
+                            setState(() => _selectedMessageIds.clear());
+                            Navigator.of(context)
+                                .popUntil((route) => route.isFirst);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'تم تحويل ${messagesToForward.length} رسائل بنجاح',
+                                    style:
+                                        const TextStyle(color: Colors.white)),
+                                backgroundColor: const Color(0xFF4ADE80),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, st) => const Text('خطأ في تحميل المستخدمين',
+                      style: TextStyle(color: Colors.red)),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -742,46 +920,53 @@ class _AnimatedWaveformState extends State<_AnimatedWaveform>
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMe;
+  final bool isSelected;
   final VoidCallback? onDownload;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
+    this.isSelected = false,
     this.onDownload,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          gradient: isMe
-              ? const LinearGradient(
-                  colors: [Color(0xFF6C63FF), Color(0xFF5B52E5)],
-                )
-              : null,
-          color: isMe ? null : const Color(0xFF1E1E38),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMe ? 18 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 18),
+    return Container(
+      color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
           ),
+          decoration: BoxDecoration(
+            gradient: isMe
+                ? const LinearGradient(
+                    colors: [Color(0xFF6C63FF), Color(0xFF5B52E5)],
+                  )
+                : null,
+            color: isMe ? null : const Color(0xFF1E1E38),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(isMe ? 18 : 4),
+              bottomRight: Radius.circular(isMe ? 4 : 18),
+            ),
+          ),
+          child: _buildContent(context),
         ),
-        child: _buildContent(context),
       ),
     );
   }
 
   Widget _buildContent(BuildContext context) {
+    Widget content;
     switch (message.type) {
       case MessageType.text:
-        return Padding(
+        content = Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -796,9 +981,10 @@ class _MessageBubble extends StatelessWidget {
             ],
           ),
         );
+        break;
 
       case MessageType.image:
-        return Column(
+        content = Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (message.localFilePath != null)
@@ -826,9 +1012,10 @@ class _MessageBubble extends StatelessWidget {
             ),
           ],
         );
+        break;
 
       case MessageType.video:
-        return Column(
+        content = Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (message.localFilePath != null)
@@ -845,9 +1032,10 @@ class _MessageBubble extends StatelessWidget {
             ),
           ],
         );
+        break;
 
       case MessageType.file:
-        return Padding(
+        content = Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -907,14 +1095,43 @@ class _MessageBubble extends StatelessWidget {
             ],
           ),
         );
+        break;
 
       case MessageType.audio:
-        return _AudioBubble(
+        content = _AudioBubble(
           message: message,
           isMe: isMe,
           onDownload: onDownload,
         );
+        break;
     }
+
+    if (message.isForwarded) {
+      return Column(
+        crossAxisAlignment:
+            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding:
+                const EdgeInsets.only(left: 14, right: 14, top: 8, bottom: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.reply_rounded, size: 14, color: Colors.white60),
+                SizedBox(width: 4),
+                Text('محولة',
+                    style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic)),
+              ],
+            ),
+          ),
+          content,
+        ],
+      );
+    }
+    return content;
   }
 
   void _openImage(BuildContext context, String path) {

@@ -592,7 +592,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     AppLogger.d('UI refreshed — ${sorted.length} messages', tag: 'CHAT');
   }
 
-  Future<void> sendText(String text) async {
+  Future<void> sendText(String text, {bool isForwarded = false}) async {
     if (_peerPublicKey == null) {
       AppLogger.w('Cannot send — peer public key not available', tag: 'CHAT');
       return;
@@ -617,6 +617,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       iv: encrypted['iv'],
       decryptedText: text,
       status: MessageStatus.sending,
+      isForwarded: isForwarded,
       timestamp: DateTime.now(),
     );
 
@@ -665,6 +666,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     required String filePath,
     required String fileName,
     required String fileType,
+    bool isForwarded = false,
   }) async {
     if (_peerPublicKey == null) {
       AppLogger.w(
@@ -694,6 +696,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       fileType: fileType,
       fileSize: fileSize,
       status: MessageStatus.sending,
+      isForwarded: isForwarded,
       timestamp: DateTime.now(),
     );
     state = [...state, msg];
@@ -766,6 +769,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   Future<void> sendVoice({
     required String filePath,
     required int durationSeconds,
+    bool isForwarded = false,
   }) async {
     if (_peerPublicKey == null) {
       AppLogger.w(
@@ -799,6 +803,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       audioDuration: durationSeconds,
       localFilePath: filePath,
       status: MessageStatus.sending,
+      isForwarded: isForwarded,
       timestamp: timestamp,
     );
     state = [...state, msg];
@@ -861,6 +866,39 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
             (m) => m.id == msgId ? m.copyWith(status: MessageStatus.failed) : m,
           )
           .toList();
+    }
+  }
+
+  Future<void> forwardMessage(ChatMessage message) async {
+    switch (message.type) {
+      case MessageType.text:
+        if (message.decryptedText != null) {
+          await sendText(message.decryptedText!, isForwarded: true);
+        }
+        break;
+      case MessageType.image:
+      case MessageType.video:
+      case MessageType.file:
+        if (message.localFilePath != null &&
+            message.fileName != null &&
+            message.fileType != null) {
+          await sendFile(
+            filePath: message.localFilePath!,
+            fileName: message.fileName!,
+            fileType: message.fileType!,
+            isForwarded: true,
+          );
+        }
+        break;
+      case MessageType.audio:
+        if (message.localFilePath != null && message.audioDuration != null) {
+          await sendVoice(
+            filePath: message.localFilePath!,
+            durationSeconds: message.audioDuration!,
+            isForwarded: true,
+          );
+        }
+        break;
     }
   }
 

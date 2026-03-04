@@ -25,6 +25,8 @@ class ChatMessage {
   // Audio messages
   final int? audioDuration; // seconds
 
+  final bool isForwarded;
+
   final MessageStatus status;
   final DateTime timestamp;
 
@@ -44,6 +46,7 @@ class ChatMessage {
     this.fileSize,
     this.encryptedKey,
     this.audioDuration,
+    this.isForwarded = false,
     required this.status,
     required this.timestamp,
   });
@@ -64,6 +67,7 @@ class ChatMessage {
       fileType: json['fileType'] as String?,
       encryptedKey: json['encryptedKey'] as String?,
       audioDuration: json['audioDuration'] as int?,
+      isForwarded: json['isForwarded'] as bool? ?? false,
       status: MessageStatus.delivered,
       timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
           DateTime.now(),
@@ -88,6 +92,7 @@ class ChatMessage {
       fileSize: row.fileSize as int?,
       encryptedKey: row.encryptedKey as String?,
       audioDuration: row.audioDuration as int?,
+      isForwarded: row.isForwarded ?? false,
       status: _statusFromString(row.status as String),
       timestamp: DateTime.tryParse(row.timestamp as String) ?? DateTime.now(),
     );
@@ -120,6 +125,7 @@ class ChatMessage {
       if (fileType != null) 'fileType': fileType,
       if (fileName != null) 'originalName': fileName,
       if (audioDuration != null) 'audioDuration': audioDuration,
+      if (isForwarded) 'isForwarded': true,
       'timestamp': timestamp.toIso8601String(),
     };
   }
@@ -131,6 +137,7 @@ class ChatMessage {
     String? localFilePath,
     String? fileId,
     int? audioDuration,
+    bool? isForwarded,
   }) {
     return ChatMessage(
       id: id,
@@ -148,6 +155,7 @@ class ChatMessage {
       fileSize: fileSize,
       encryptedKey: encryptedKey,
       audioDuration: audioDuration ?? this.audioDuration,
+      isForwarded: isForwarded ?? this.isForwarded,
       status: status ?? this.status,
       timestamp: timestamp,
     );
