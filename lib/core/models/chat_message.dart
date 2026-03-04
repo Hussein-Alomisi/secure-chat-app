@@ -1,6 +1,4 @@
-import 'dart:convert';
-
-enum MessageType { text, image, video, file }
+enum MessageType { text, image, video, file, audio }
 
 enum MessageStatus { sending, sent, delivered, read, failed }
 
@@ -24,6 +22,9 @@ class ChatMessage {
   final int? fileSize;
   final String? encryptedKey;
 
+  // Audio messages
+  final int? audioDuration; // seconds
+
   final MessageStatus status;
   final DateTime timestamp;
 
@@ -42,6 +43,7 @@ class ChatMessage {
     this.fileType,
     this.fileSize,
     this.encryptedKey,
+    this.audioDuration,
     required this.status,
     required this.timestamp,
   });
@@ -61,6 +63,7 @@ class ChatMessage {
       fileName: json['originalName'] as String?,
       fileType: json['fileType'] as String?,
       encryptedKey: json['encryptedKey'] as String?,
+      audioDuration: json['audioDuration'] as int?,
       status: MessageStatus.delivered,
       timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
           DateTime.now(),
@@ -84,6 +87,7 @@ class ChatMessage {
       fileType: row.fileType as String?,
       fileSize: row.fileSize as int?,
       encryptedKey: row.encryptedKey as String?,
+      audioDuration: row.audioDuration as int?,
       status: _statusFromString(row.status as String),
       timestamp: DateTime.tryParse(row.timestamp as String) ?? DateTime.now(),
     );
@@ -115,6 +119,7 @@ class ChatMessage {
       if (encryptedKey != null) 'encryptedKey': encryptedKey,
       if (fileType != null) 'fileType': fileType,
       if (fileName != null) 'originalName': fileName,
+      if (audioDuration != null) 'audioDuration': audioDuration,
       'timestamp': timestamp.toIso8601String(),
     };
   }
@@ -125,6 +130,7 @@ class ChatMessage {
     String? decryptedText,
     String? localFilePath,
     String? fileId,
+    int? audioDuration,
   }) {
     return ChatMessage(
       id: id,
@@ -141,6 +147,7 @@ class ChatMessage {
       fileType: fileType,
       fileSize: fileSize,
       encryptedKey: encryptedKey,
+      audioDuration: audioDuration ?? this.audioDuration,
       status: status ?? this.status,
       timestamp: timestamp,
     );
@@ -154,6 +161,8 @@ class ChatMessage {
         return MessageType.video;
       case 'file':
         return MessageType.file;
+      case 'audio':
+        return MessageType.audio;
       default:
         return MessageType.text;
     }

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +11,7 @@ import 'package:video_player/video_player.dart';
 import 'package:photo_view/photo_view.dart';
 import '../../providers/app_providers.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/audio/voice_recorder_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final AppUserModel peer;
@@ -18,18 +21,38 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with SingleTickerProviderStateMixin {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isTyping = false;
+  // ignore: prefer_final_fields
   bool _peerIsTyping = false;
+
+  // ─── Voice recording state ─────────────────────────────────────────────────
+  final _voiceRecorder = VoiceRecorderService();
+  bool _isRecording = false; // true while recording is active
+  bool _isSlidingToCancel = false; // true during hold + slide left
+  int _recordingSeconds = 0;
+  Timer? _recordingTimer;
+  double _dragOffset = 0;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
+  static const double _cancelThreshold = 80.0;
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(chatProvider(widget.peer.id).notifier).initialize();
-      // Scroll to bottom after initial load
       _scrollToBottom();
     });
   }
@@ -38,6 +61,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    _recordingTimer?.cancel();
+    _pulseController.dispose();
+    _voiceRecorder.dispose();
     super.dispose();
   }
 
@@ -60,6 +86,118 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     await ref.read(chatProvider(widget.peer.id).notifier).sendText(text);
     _scrollToBottom();
   }
+
+  // ─── Voice recording logic ─────────────────────────────────────────────────
+
+  Future<void> _onMicLongPressStart(LongPressStartDetails details) async {
+    final hasPermission = await _voiceRecorder.requestPermission();
+    if (!hasPermission) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('يتطلب الوصول إلى الميكروفون للإرسال الصوتي'),
+            backgroundColor: Color(0xFF6C63FF),
+          ),
+        );
+      }
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    await _voiceRecorder.start();
+
+    setState(() {
+      _isRecording = true;
+      _isSlidingToCancel = false;
+      _recordingSeconds = 0;
+      _dragOffset = 0;
+    });
+
+    _pulseController.repeat(reverse: true);
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordingSeconds++);
+    });
+  }
+
+  /// Called while the user is still holding – track slide-left gesture.
+  void _onMicLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+    if (!_isRecording) return;
+    final dx = -details.localOffsetFromOrigin.dx; // positive = dragged left
+    setState(() {
+      _dragOffset = dx.clamp(0.0, _cancelThreshold + 20);
+      _isSlidingToCancel = dx > _cancelThreshold;
+    });
+  }
+
+  /// Called when the user lifts their finger.
+  /// If they slid to cancel → cancel immediately.
+  /// Otherwise → keep recording; the UI now shows Send / Cancel buttons.
+  Future<void> _onMicLongPressEnd(LongPressEndDetails details) async {
+    if (!_isRecording) return;
+
+    if (_isSlidingToCancel) {
+      await _cancelRecording();
+    } else {
+      // Reset drag visual but DO NOT stop recording.
+      // The user can now tap Send or Cancel in the recording bar.
+      setState(() {
+        _dragOffset = 0;
+        _isSlidingToCancel = false;
+      });
+    }
+  }
+
+  /// Tapped the ✅ Send button in the recording bar.
+  Future<void> _sendRecording() async {
+    if (!_isRecording) return;
+    _stopRecordingTimer();
+
+    if (_recordingSeconds < 1) {
+      await _cancelRecording();
+      return;
+    }
+
+    final path = await _voiceRecorder.stop();
+    setState(() {
+      _isRecording = false;
+      _dragOffset = 0;
+    });
+
+    if (path != null && mounted) {
+      await ref.read(chatProvider(widget.peer.id).notifier).sendVoice(
+            filePath: path,
+            durationSeconds: _recordingSeconds,
+          );
+      _scrollToBottom();
+    }
+  }
+
+  /// Tapped the ❌ Cancel button or slid past threshold.
+  Future<void> _cancelRecording() async {
+    _stopRecordingTimer();
+    await _voiceRecorder.cancel();
+    HapticFeedback.lightImpact();
+    setState(() {
+      _isRecording = false;
+      _isSlidingToCancel = false;
+      _dragOffset = 0;
+    });
+  }
+
+  void _stopRecordingTimer() {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    _pulseController.stop();
+    _pulseController.reset();
+  }
+
+  String _formatDuration(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  // ─── File picking ──────────────────────────────────────────────────────────
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -167,21 +305,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final usersAsync = ref.watch(usersProvider);
     final myId = auth.userId ?? '';
 
-    // Watch for real-time presence/status updates from usersProvider
     final currentPeer = usersAsync.maybeWhen(
       data: (users) => users.firstWhere((u) => u.id == widget.peer.id,
           orElse: () => widget.peer),
       orElse: () => widget.peer,
     );
 
-    // Auto-scroll when new messages arrive
     ref.listen<List<ChatMessage>>(chatProvider(widget.peer.id), (prev, next) {
       if (prev != null && next.length > prev.length) {
         _scrollToBottom();
       }
     });
 
-    // Parse peer avatar color
     Color peerColor;
     try {
       peerColor =
@@ -191,7 +326,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: TextDirection.ltr,
       child: Scaffold(
         backgroundColor: const Color(0xFF0D0D1A),
         appBar: AppBar(
@@ -240,14 +375,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ],
           ),
-          // actions: [
-          //   IconButton(
-          //     icon: const Icon(Icons.lock_rounded,
-          //         color: Color(0xFF6C63FF), size: 18),
-          //     onPressed: () {},
-          //     tooltip: 'مشفر E2EE',
-          //   ),
-          // ],
         ),
         body: Column(
           children: [
@@ -283,68 +410,173 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: SafeArea(
                 top: false,
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.attach_file_rounded,
-                          color: Colors.white54),
-                      onPressed: _showAttachmentMenu,
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _textController,
-                        textDirection: TextDirection.rtl,
-                        style: const TextStyle(color: Colors.white),
-                        maxLines: 4,
-                        minLines: 1,
-                        onChanged: (val) {
-                          final typing = val.isNotEmpty;
-                          if (typing != _isTyping) {
-                            setState(() => _isTyping = typing);
-                            final socket = ref.read(socketServiceProvider);
-                            typing
-                                ? socket.sendTypingStart(widget.peer.id)
-                                : socket.sendTypingStop(widget.peer.id);
-                          }
-                        },
-                        decoration: InputDecoration(
-                          hintText: 'اكتب رسالة...',
-                          hintStyle:
-                              TextStyle(color: Colors.white.withOpacity(0.3)),
-                          filled: true,
-                          fillColor: Colors.white.withOpacity(0.06),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _sendText,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.send_rounded,
-                            color: Colors.white, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
+                child: _isRecording
+                    ? _buildRecordingBar()
+                    : _buildNormalInputBar(),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // ─── Normal input bar ───────────────────────────────────────────────────────
+
+  Widget _buildNormalInputBar() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.attach_file_rounded, color: Colors.white54),
+          onPressed: _showAttachmentMenu,
+        ),
+        Expanded(
+          child: TextField(
+            controller: _textController,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(color: Colors.white),
+            maxLines: 4,
+            minLines: 1,
+            onChanged: (val) {
+              final typing = val.isNotEmpty;
+              if (typing != _isTyping) {
+                setState(() => _isTyping = typing);
+                final socket = ref.read(socketServiceProvider);
+                typing
+                    ? socket.sendTypingStart(widget.peer.id)
+                    : socket.sendTypingStop(widget.peer.id);
+              }
+            },
+            decoration: InputDecoration(
+              hintText: 'اكتب رسالة...',
+              hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.06),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _isTyping
+            ? _SendButton(onTap: _sendText)
+            : _MicButton(
+                pulseAnimation: _pulseAnimation,
+                onLongPressStart: _onMicLongPressStart,
+                onLongPressMoveUpdate: _onMicLongPressMoveUpdate,
+                onLongPressEnd: _onMicLongPressEnd,
+              ),
+      ],
+    );
+  }
+
+  // ─── Recording bar ──────────────────────────────────────────────────────────
+
+  Widget _buildRecordingBar() {
+    final isSlidingNow = _isSlidingToCancel && _dragOffset > 0;
+    final slideHintOpacity =
+        (1.0 - (_dragOffset / _cancelThreshold)).clamp(0.0, 1.0);
+
+    return Row(
+      children: [
+        // ❌ Cancel button
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: _cancelRecording,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.red.withOpacity(0.12),
+              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: Colors.redAccent, size: 22),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // Pulsing mic + timer
+        ScaleTransition(
+          scale: _pulseAnimation,
+          child: Icon(
+            Icons.mic_rounded,
+            color: isSlidingNow ? Colors.red : const Color(0xFF6C63FF),
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          _formatDuration(_recordingSeconds),
+          style: TextStyle(
+            color: isSlidingNow ? Colors.redAccent : Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+
+        // Slide-to-cancel hint or "release to cancel" text
+        Expanded(
+          child: isSlidingNow
+              ? const Center(
+                  child: Text(
+                    'حرر للإلغاء',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Opacity(
+                    opacity: slideHintOpacity,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_back_ios_rounded,
+                            color: Colors.white38, size: 13),
+                        SizedBox(width: 2),
+                        Text(
+                          'اسحب للإلغاء',
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ),
+
+        // Animated waveform
+        _AnimatedWaveform(isActive: !isSlidingNow),
+        const SizedBox(width: 8),
+
+        // ✅ Send button
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: _sendRecording,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)],
+                ),
+              ),
+              child:
+                  const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -370,6 +602,138 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       default:
         return 'application/octet-stream';
     }
+  }
+}
+
+// ─── Send Button ────────────────────────────────────────────────────────────
+
+class _SendButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SendButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)],
+          ),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+// ─── Mic Button ─────────────────────────────────────────────────────────────
+
+class _MicButton extends StatelessWidget {
+  final Animation<double> pulseAnimation;
+  final void Function(LongPressStartDetails) onLongPressStart;
+  final void Function(LongPressMoveUpdateDetails) onLongPressMoveUpdate;
+  final void Function(LongPressEndDetails) onLongPressEnd;
+
+  const _MicButton({
+    required this.pulseAnimation,
+    required this.onLongPressStart,
+    required this.onLongPressMoveUpdate,
+    required this.onLongPressEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPressStart: onLongPressStart,
+      onLongPressMoveUpdate: onLongPressMoveUpdate,
+      onLongPressEnd: onLongPressEnd,
+      child: ScaleTransition(
+        scale: pulseAnimation,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)],
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.mic_rounded, color: Colors.white, size: 22),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Animated Waveform ───────────────────────────────────────────────────────
+
+class _AnimatedWaveform extends StatefulWidget {
+  final bool isActive;
+  const _AnimatedWaveform({required this.isActive});
+
+  @override
+  State<_AnimatedWaveform> createState() => _AnimatedWaveformState();
+}
+
+class _AnimatedWaveformState extends State<_AnimatedWaveform>
+    with TickerProviderStateMixin {
+  late List<AnimationController> _controllers;
+  late List<Animation<double>> _animations;
+  static const _barCount = 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = List.generate(
+      _barCount,
+      (i) => AnimationController(
+        vsync: this,
+        duration: Duration(milliseconds: 300 + i * 80),
+      )..repeat(reverse: true),
+    );
+    _animations = _controllers
+        .map((c) => Tween<double>(begin: 4.0, end: 18.0).animate(
+              CurvedAnimation(parent: c, curve: Curves.easeInOut),
+            ))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 24,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: List.generate(_barCount, (i) {
+          return AnimatedBuilder(
+            animation: _animations[i],
+            builder: (_, __) => Container(
+              width: 3,
+              height: widget.isActive ? _animations[i].value : 4,
+              decoration: BoxDecoration(
+                color:
+                    widget.isActive ? const Color(0xFF6C63FF) : Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
   }
 }
 
@@ -425,7 +789,7 @@ class _MessageBubble extends StatelessWidget {
               Text(
                 message.decryptedText ?? '🔒',
                 style: const TextStyle(color: Colors.white, fontSize: 15),
-                textDirection: TextDirection.rtl,
+                textDirection: TextDirection.ltr,
               ),
               const SizedBox(height: 4),
               _TimeAndStatus(message: message, isMe: isMe),
@@ -543,6 +907,13 @@ class _MessageBubble extends StatelessWidget {
             ],
           ),
         );
+
+      case MessageType.audio:
+        return _AudioBubble(
+          message: message,
+          isMe: isMe,
+          onDownload: onDownload,
+        );
     }
   }
 
@@ -565,6 +936,137 @@ class _MessageBubble extends StatelessWidget {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
+
+// ─── Audio Bubble ─────────────────────────────────────────────────────────────
+
+class _AudioBubble extends ConsumerWidget {
+  final ChatMessage message;
+  final bool isMe;
+  final VoidCallback? onDownload;
+
+  const _AudioBubble({
+    required this.message,
+    required this.isMe,
+    this.onDownload,
+  });
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch the singleton manager – rebuilds this widget whenever its state
+    // changes (position tick, play/pause toggle, completion reset).
+    final manager = ref.watch(audioPlaybackManagerProvider);
+
+    final hasFile = message.localFilePath != null;
+    final msgId = message.id;
+
+    final isActive = manager.isActive(msgId);
+    final isPlaying = manager.isPlayingMessage(msgId);
+
+    // Use live position/total only for the active track; otherwise show saved
+    // audioDuration so the duration label is always populated.
+    final position = isActive ? manager.position : Duration.zero;
+    final total = isActive && manager.total > Duration.zero
+        ? manager.total
+        : Duration(seconds: message.audioDuration ?? 0);
+
+    final progress = total.inMilliseconds > 0
+        ? (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    final iconColor = isMe ? Colors.white : const Color(0xFF6C63FF);
+    final trackColor = isMe ? Colors.white.withOpacity(0.3) : Colors.white24;
+    final activeColor = isMe ? Colors.white : const Color(0xFF6C63FF);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Play / Pause / Download button
+              SizedBox(
+                width: 38,
+                height: 38,
+                child: Material(
+                  color: isMe
+                      ? Colors.white.withOpacity(0.15)
+                      : const Color(0xFF6C63FF).withOpacity(0.15),
+                  shape: const CircleBorder(),
+                  child: !hasFile && onDownload != null
+                      ? IconButton(
+                          icon: Icon(Icons.download_rounded,
+                              color: iconColor, size: 20),
+                          onPressed: onDownload,
+                          padding: EdgeInsets.zero,
+                        )
+                      : IconButton(
+                          icon: Icon(
+                            isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            color: iconColor,
+                            size: 22,
+                          ),
+                          onPressed: hasFile
+                              ? () => manager.togglePlay(
+                                    msgId,
+                                    message.localFilePath!,
+                                  )
+                              : null,
+                          padding: EdgeInsets.zero,
+                        ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Progress bar + time label
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 140,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress.toDouble(),
+                        backgroundColor: trackColor,
+                        valueColor: AlwaysStoppedAnimation(activeColor),
+                        minHeight: 4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    total > Duration.zero
+                        ? '${_fmt(position)} / ${_fmt(total)}'
+                        : '🎤 رسالة صوتية',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 11,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _TimeAndStatus(message: message, isMe: isMe),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Shared sub-widgets ──────────────────────────────────────────────────────
 
 class _TimeAndStatus extends StatelessWidget {
   final ChatMessage message;
@@ -803,17 +1305,29 @@ class _EmptyConversation extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.lock_rounded, color: Color(0xFF6C63FF), size: 48),
-          const SizedBox(height: 12),
-          Text(
-            'ابدأ محادثة مع $peerName',
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF6C63FF).withOpacity(0.1),
+            ),
+            child: const Icon(
+              Icons.lock_rounded,
+              color: Color(0xFF6C63FF),
+              size: 36,
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 16),
           Text(
-            'جميع الرسائل مشفرة طرفياً',
+            'محادثة مع $peerName',
+            style: const TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'الرسائل مشفرة من طرف إلى طرف 🔒',
             style:
-                TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12),
+                TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12),
           ),
         ],
       ),

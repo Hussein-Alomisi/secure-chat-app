@@ -33,7 +33,8 @@ class Messages extends Table {
   TextColumn get conversationId => text().references(Conversations, #id)();
   TextColumn get senderId => text()();
   TextColumn get recipientId => text()();
-  TextColumn get type => text()(); // 'text' | 'image' | 'video' | 'file'
+  TextColumn get type =>
+      text()(); // 'text' | 'image' | 'video' | 'file' | 'audio'
   TextColumn get encryptedContent => text().nullable()(); // for text messages
   TextColumn get iv => text().nullable()(); // AES IV, base64
   TextColumn get decryptedText =>
@@ -46,6 +47,7 @@ class Messages extends Table {
   IntColumn get fileSize => integer().nullable()();
   TextColumn get encryptedKey =>
       text().nullable()(); // encrypted AES key for file
+  IntColumn get audioDuration => integer().nullable()(); // seconds (audio msgs)
   TextColumn get status => text().withDefault(const Constant('sending'))();
   // 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
   TextColumn get timestamp => text()();
@@ -61,7 +63,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -70,6 +72,12 @@ class LocalDatabase extends _$LocalDatabase {
             // Add decryptedText column — SQLite allows adding nullable columns
             await migrator.database.customStatement(
               'ALTER TABLE messages ADD COLUMN decrypted_text TEXT;',
+            );
+          }
+          if (from < 3) {
+            // Add audioDuration column for voice messages
+            await migrator.database.customStatement(
+              'ALTER TABLE messages ADD COLUMN audio_duration INTEGER;',
             );
           }
         },

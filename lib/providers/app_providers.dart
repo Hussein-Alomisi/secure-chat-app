@@ -13,6 +13,7 @@ import '../core/models/chat_message.dart';
 import '../core/utils/app_logger.dart';
 import 'package:drift/drift.dart';
 import '../core/auth/biometric_service.dart';
+import '../core/audio/audio_playback_manager.dart';
 
 // ─── Service Providers (Singletons) ──────────────────────────────────────────
 
@@ -38,6 +39,13 @@ final localDatabaseProvider = Provider<LocalDatabase>((ref) {
   final db = LocalDatabase();
   ref.onDispose(db.close);
   return db;
+});
+
+final audioPlaybackManagerProvider =
+    ChangeNotifierProvider<AudioPlaybackManager>((ref) {
+  final manager = AudioPlaybackManager();
+  ref.onDispose(manager.dispose);
+  return manager;
 });
 
 // ─── Theme Mode Provider ──────────────────────────────────────────────────────
@@ -230,9 +238,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await _saveToDb(msgWithConv);
           AppLogger.d('STEP 4 ✓ message saved to DB', tag: 'AUTH');
 
+          String preview;
+          switch (msg.type) {
+            case MessageType.text:
+              preview = '🔒 رسالة مشفرة';
+              break;
+            case MessageType.audio:
+              preview = '🎤 رسالة صوتية';
+              break;
+            default:
+              preview = '📎 ملف';
+          }
           await _db.updateConversationLastMessage(
             convId,
-            msg.type == MessageType.text ? '🔒 رسالة مشفرة' : '📎 ملف',
+            preview,
             msg.timestamp.toIso8601String(),
           );
           AppLogger.d(
@@ -287,6 +306,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fileType: Value(msg.fileType),
         fileSize: Value(msg.fileSize),
         encryptedKey: Value(msg.encryptedKey),
+        audioDuration: Value(msg.audioDuration),
         status: Value(msg.status.name),
         timestamp: Value(msg.timestamp.toIso8601String()),
       ),
@@ -743,6 +763,107 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     }
   }
 
+  Future<void> sendVoice({
+    required String filePath,
+    required int durationSeconds,
+  }) async {
+    if (_peerPublicKey == null) {
+      AppLogger.w(
+        'Cannot send voice — peer public key not available',
+        tag: 'CHAT',
+      );
+      return;
+    }
+
+    final msgId = const Uuid().v4();
+    final timestamp = DateTime.now();
+    final fileName = 'voice_${timestamp.millisecondsSinceEpoch}.m4a';
+    const fileType = 'audio/m4a';
+    final sourceFile = File(filePath);
+    final fileSize = await sourceFile.length();
+
+    AppLogger.i(
+      'Sending voice message: $fileName ($durationSeconds s) id:$msgId',
+      tag: 'CHAT',
+    );
+
+    final msg = ChatMessage(
+      id: msgId,
+      conversationId: _conversationId ?? '',
+      senderId: myId,
+      recipientId: peerId,
+      type: MessageType.audio,
+      fileName: fileName,
+      fileType: fileType,
+      fileSize: fileSize,
+      audioDuration: durationSeconds,
+      localFilePath: filePath,
+      status: MessageStatus.sending,
+      timestamp: timestamp,
+    );
+    state = [...state, msg];
+
+    try {
+      AppLogger.d('Encrypting voice file...', tag: 'CHAT');
+      final tempDir = await getTemporaryDirectory();
+      final tempEncPath = '${tempDir.path}/${const Uuid().v4()}.enc.tmp';
+
+      final encrypted = await _enc.encryptFile(
+        inputFilePath: filePath,
+        outputFilePath: tempEncPath,
+        recipientPublicKeyBase64: _peerPublicKey!,
+      );
+
+      AppLogger.d('Voice file encrypted ✓', tag: 'CHAT');
+
+      final fileId = await _api.uploadEncryptedFile(
+        encryptedFilePath: tempEncPath,
+        recipientId: peerId,
+        encryptedKey: encrypted.encryptedKeyBase64,
+        iv: encrypted.ivBase64,
+        fileType: fileType,
+        originalName: fileName,
+        messageId: msgId,
+      );
+
+      await File(tempEncPath).delete().catchError((_) => File(tempEncPath));
+      AppLogger.i('Voice file uploaded ✓ fileId:$fileId', tag: 'CHAT');
+
+      final msgWithFile = msg.copyWith(
+        fileId: fileId,
+        status: MessageStatus.sent,
+      );
+
+      final localPath = await _api.saveFileFromPath(
+        sourceFilePath: filePath,
+        fileName: fileName,
+        subFolder: 'audio',
+      );
+      AppLogger.d('Voice file saved locally: $localPath', tag: 'CHAT');
+
+      final msgFinal = msgWithFile.copyWith(localFilePath: localPath);
+      await _saveMessageToDb(msgFinal);
+
+      await _db.updateConversationLastMessage(
+        _conversationId!,
+        '🎤 رسالة صوتية',
+        timestamp.toIso8601String(),
+      );
+
+      await _socket.sendMessage(msgFinal.toSocketJson());
+
+      state = state.map((m) => m.id == msgId ? msgFinal : m).toList();
+      AppLogger.i('Voice message sent ✓', tag: 'CHAT');
+    } catch (e) {
+      AppLogger.e('Failed to send voice $fileName', tag: 'CHAT', error: e);
+      state = state
+          .map(
+            (m) => m.id == msgId ? m.copyWith(status: MessageStatus.failed) : m,
+          )
+          .toList();
+    }
+  }
+
   Future<void> downloadFile(ChatMessage msg) async {
     if (msg.fileId == null || msg.localFilePath != null) return;
 
@@ -848,6 +969,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         fileType: Value(msg.fileType),
         fileSize: Value(msg.fileSize),
         encryptedKey: Value(msg.encryptedKey),
+        audioDuration: Value(msg.audioDuration),
         status: Value(msg.status.name),
         timestamp: Value(msg.timestamp.toIso8601String()),
       ),
@@ -857,6 +979,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   MessageType _getMessageType(String mimeType) {
     if (mimeType.startsWith('image/')) return MessageType.image;
     if (mimeType.startsWith('video/')) return MessageType.video;
+    if (mimeType.startsWith('audio/')) return MessageType.audio;
     return MessageType.file;
   }
 
@@ -866,6 +989,8 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         return 'images';
       case MessageType.video:
         return 'videos';
+      case MessageType.audio:
+        return 'audio';
       default:
         return 'files';
     }

@@ -772,6 +772,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
   late final GeneratedColumn<String> encryptedKey = GeneratedColumn<String>(
       'encrypted_key', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _audioDurationMeta =
+      const VerificationMeta('audioDuration');
+  @override
+  late final GeneratedColumn<int> audioDuration = GeneratedColumn<int>(
+      'audio_duration', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
@@ -801,6 +807,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         fileType,
         fileSize,
         encryptedKey,
+        audioDuration,
         status,
         timestamp
       ];
@@ -890,6 +897,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           encryptedKey.isAcceptableOrUnknown(
               data['encrypted_key']!, _encryptedKeyMeta));
     }
+    if (data.containsKey('audio_duration')) {
+      context.handle(
+          _audioDurationMeta,
+          audioDuration.isAcceptableOrUnknown(
+              data['audio_duration']!, _audioDurationMeta));
+    }
     if (data.containsKey('status')) {
       context.handle(_statusMeta,
           status.isAcceptableOrUnknown(data['status']!, _statusMeta));
@@ -937,6 +950,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           .read(DriftSqlType.int, data['${effectivePrefix}file_size']),
       encryptedKey: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}encrypted_key']),
+      audioDuration: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}audio_duration']),
       status: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
       timestamp: attachedDatabase.typeMapping
@@ -965,6 +980,7 @@ class Message extends DataClass implements Insertable<Message> {
   final String? fileType;
   final int? fileSize;
   final String? encryptedKey;
+  final int? audioDuration;
   final String status;
   final String timestamp;
   const Message(
@@ -982,6 +998,7 @@ class Message extends DataClass implements Insertable<Message> {
       this.fileType,
       this.fileSize,
       this.encryptedKey,
+      this.audioDuration,
       required this.status,
       required this.timestamp});
   @override
@@ -1019,6 +1036,9 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || encryptedKey != null) {
       map['encrypted_key'] = Variable<String>(encryptedKey);
     }
+    if (!nullToAbsent || audioDuration != null) {
+      map['audio_duration'] = Variable<int>(audioDuration);
+    }
     map['status'] = Variable<String>(status);
     map['timestamp'] = Variable<String>(timestamp);
     return map;
@@ -1055,6 +1075,9 @@ class Message extends DataClass implements Insertable<Message> {
       encryptedKey: encryptedKey == null && nullToAbsent
           ? const Value.absent()
           : Value(encryptedKey),
+      audioDuration: audioDuration == null && nullToAbsent
+          ? const Value.absent()
+          : Value(audioDuration),
       status: Value(status),
       timestamp: Value(timestamp),
     );
@@ -1078,6 +1101,7 @@ class Message extends DataClass implements Insertable<Message> {
       fileType: serializer.fromJson<String?>(json['fileType']),
       fileSize: serializer.fromJson<int?>(json['fileSize']),
       encryptedKey: serializer.fromJson<String?>(json['encryptedKey']),
+      audioDuration: serializer.fromJson<int?>(json['audioDuration']),
       status: serializer.fromJson<String>(json['status']),
       timestamp: serializer.fromJson<String>(json['timestamp']),
     );
@@ -1100,6 +1124,7 @@ class Message extends DataClass implements Insertable<Message> {
       'fileType': serializer.toJson<String?>(fileType),
       'fileSize': serializer.toJson<int?>(fileSize),
       'encryptedKey': serializer.toJson<String?>(encryptedKey),
+      'audioDuration': serializer.toJson<int?>(audioDuration),
       'status': serializer.toJson<String>(status),
       'timestamp': serializer.toJson<String>(timestamp),
     };
@@ -1120,6 +1145,7 @@ class Message extends DataClass implements Insertable<Message> {
           Value<String?> fileType = const Value.absent(),
           Value<int?> fileSize = const Value.absent(),
           Value<String?> encryptedKey = const Value.absent(),
+          Value<int?> audioDuration = const Value.absent(),
           String? status,
           String? timestamp}) =>
       Message(
@@ -1142,6 +1168,8 @@ class Message extends DataClass implements Insertable<Message> {
         fileSize: fileSize.present ? fileSize.value : this.fileSize,
         encryptedKey:
             encryptedKey.present ? encryptedKey.value : this.encryptedKey,
+        audioDuration:
+            audioDuration.present ? audioDuration.value : this.audioDuration,
         status: status ?? this.status,
         timestamp: timestamp ?? this.timestamp,
       );
@@ -1172,6 +1200,9 @@ class Message extends DataClass implements Insertable<Message> {
       encryptedKey: data.encryptedKey.present
           ? data.encryptedKey.value
           : this.encryptedKey,
+      audioDuration: data.audioDuration.present
+          ? data.audioDuration.value
+          : this.audioDuration,
       status: data.status.present ? data.status.value : this.status,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
     );
@@ -1194,6 +1225,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('fileType: $fileType, ')
           ..write('fileSize: $fileSize, ')
           ..write('encryptedKey: $encryptedKey, ')
+          ..write('audioDuration: $audioDuration, ')
           ..write('status: $status, ')
           ..write('timestamp: $timestamp')
           ..write(')'))
@@ -1216,6 +1248,7 @@ class Message extends DataClass implements Insertable<Message> {
       fileType,
       fileSize,
       encryptedKey,
+      audioDuration,
       status,
       timestamp);
   @override
@@ -1236,6 +1269,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.fileType == this.fileType &&
           other.fileSize == this.fileSize &&
           other.encryptedKey == this.encryptedKey &&
+          other.audioDuration == this.audioDuration &&
           other.status == this.status &&
           other.timestamp == this.timestamp);
 }
@@ -1255,6 +1289,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> fileType;
   final Value<int?> fileSize;
   final Value<String?> encryptedKey;
+  final Value<int?> audioDuration;
   final Value<String> status;
   final Value<String> timestamp;
   final Value<int> rowid;
@@ -1273,6 +1308,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.fileType = const Value.absent(),
     this.fileSize = const Value.absent(),
     this.encryptedKey = const Value.absent(),
+    this.audioDuration = const Value.absent(),
     this.status = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1292,6 +1328,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.fileType = const Value.absent(),
     this.fileSize = const Value.absent(),
     this.encryptedKey = const Value.absent(),
+    this.audioDuration = const Value.absent(),
     this.status = const Value.absent(),
     required String timestamp,
     this.rowid = const Value.absent(),
@@ -1316,6 +1353,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? fileType,
     Expression<int>? fileSize,
     Expression<String>? encryptedKey,
+    Expression<int>? audioDuration,
     Expression<String>? status,
     Expression<String>? timestamp,
     Expression<int>? rowid,
@@ -1335,6 +1373,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (fileType != null) 'file_type': fileType,
       if (fileSize != null) 'file_size': fileSize,
       if (encryptedKey != null) 'encrypted_key': encryptedKey,
+      if (audioDuration != null) 'audio_duration': audioDuration,
       if (status != null) 'status': status,
       if (timestamp != null) 'timestamp': timestamp,
       if (rowid != null) 'rowid': rowid,
@@ -1356,6 +1395,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       Value<String?>? fileType,
       Value<int?>? fileSize,
       Value<String?>? encryptedKey,
+      Value<int?>? audioDuration,
       Value<String>? status,
       Value<String>? timestamp,
       Value<int>? rowid}) {
@@ -1374,6 +1414,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       fileType: fileType ?? this.fileType,
       fileSize: fileSize ?? this.fileSize,
       encryptedKey: encryptedKey ?? this.encryptedKey,
+      audioDuration: audioDuration ?? this.audioDuration,
       status: status ?? this.status,
       timestamp: timestamp ?? this.timestamp,
       rowid: rowid ?? this.rowid,
@@ -1425,6 +1466,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (encryptedKey.present) {
       map['encrypted_key'] = Variable<String>(encryptedKey.value);
     }
+    if (audioDuration.present) {
+      map['audio_duration'] = Variable<int>(audioDuration.value);
+    }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
@@ -1454,6 +1498,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('fileType: $fileType, ')
           ..write('fileSize: $fileSize, ')
           ..write('encryptedKey: $encryptedKey, ')
+          ..write('audioDuration: $audioDuration, ')
           ..write('status: $status, ')
           ..write('timestamp: $timestamp, ')
           ..write('rowid: $rowid')
@@ -1802,6 +1847,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> fileType,
   Value<int?> fileSize,
   Value<String?> encryptedKey,
+  Value<int?> audioDuration,
   Value<String> status,
   required String timestamp,
   Value<int> rowid,
@@ -1821,6 +1867,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> fileType,
   Value<int?> fileSize,
   Value<String?> encryptedKey,
+  Value<int?> audioDuration,
   Value<String> status,
   Value<String> timestamp,
   Value<int> rowid,
@@ -1857,6 +1904,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String?> fileType = const Value.absent(),
             Value<int?> fileSize = const Value.absent(),
             Value<String?> encryptedKey = const Value.absent(),
+            Value<int?> audioDuration = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<String> timestamp = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -1876,6 +1924,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             fileType: fileType,
             fileSize: fileSize,
             encryptedKey: encryptedKey,
+            audioDuration: audioDuration,
             status: status,
             timestamp: timestamp,
             rowid: rowid,
@@ -1895,6 +1944,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String?> fileType = const Value.absent(),
             Value<int?> fileSize = const Value.absent(),
             Value<String?> encryptedKey = const Value.absent(),
+            Value<int?> audioDuration = const Value.absent(),
             Value<String> status = const Value.absent(),
             required String timestamp,
             Value<int> rowid = const Value.absent(),
@@ -1914,6 +1964,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             fileType: fileType,
             fileSize: fileSize,
             encryptedKey: encryptedKey,
+            audioDuration: audioDuration,
             status: status,
             timestamp: timestamp,
             rowid: rowid,
@@ -1986,6 +2037,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get encryptedKey => $state.composableBuilder(
       column: $state.table.encryptedKey,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get audioDuration => $state.composableBuilder(
+      column: $state.table.audioDuration,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -2077,6 +2133,11 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<String> get encryptedKey => $state.composableBuilder(
       column: $state.table.encryptedKey,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get audioDuration => $state.composableBuilder(
+      column: $state.table.audioDuration,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

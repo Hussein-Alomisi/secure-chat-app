@@ -61,6 +61,10 @@ dependencies:
   cupertino_icons: ^1.0.6
   local_auth: ^2.3.0
 
+  # Audio (voice messages)
+  record: ^6.1.1
+  just_audio: ^0.9.36
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
