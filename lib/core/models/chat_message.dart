@@ -27,6 +27,10 @@ class ChatMessage {
 
   final bool isForwarded;
 
+  // Deletion
+  final bool isDeleted;
+  final String? deletedFor; // 'me' | 'everyone' | null
+
   final MessageStatus status;
   final DateTime timestamp;
 
@@ -47,6 +51,8 @@ class ChatMessage {
     this.encryptedKey,
     this.audioDuration,
     this.isForwarded = false,
+    this.isDeleted = false,
+    this.deletedFor,
     required this.status,
     required this.timestamp,
   });
@@ -68,6 +74,8 @@ class ChatMessage {
       encryptedKey: json['encryptedKey'] as String?,
       audioDuration: json['audioDuration'] as int?,
       isForwarded: json['isForwarded'] as bool? ?? false,
+      isDeleted: json['isDeleted'] as bool? ?? false,
+      deletedFor: json['deletedFor'] as String?,
       status: MessageStatus.delivered,
       timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
           DateTime.now(),
@@ -93,6 +101,8 @@ class ChatMessage {
       encryptedKey: row.encryptedKey as String?,
       audioDuration: row.audioDuration as int?,
       isForwarded: row.isForwarded ?? false,
+      isDeleted: (row.isDeleted ?? false) as bool,
+      deletedFor: row.deletedFor as String?,
       status: _statusFromString(row.status as String),
       timestamp: DateTime.tryParse(row.timestamp as String) ?? DateTime.now(),
     );
@@ -138,6 +148,8 @@ class ChatMessage {
     String? fileId,
     int? audioDuration,
     bool? isForwarded,
+    bool? isDeleted,
+    String? deletedFor,
   }) {
     return ChatMessage(
       id: id,
@@ -156,6 +168,8 @@ class ChatMessage {
       encryptedKey: encryptedKey,
       audioDuration: audioDuration ?? this.audioDuration,
       isForwarded: isForwarded ?? this.isForwarded,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedFor: deletedFor ?? this.deletedFor,
       status: status ?? this.status,
       timestamp: timestamp,
     );

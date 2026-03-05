@@ -103,6 +103,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // regardless of which screen is open.
   StreamSubscription<Map<String, dynamic>>? _globalMsgSub;
 
+  // Global subscription for remote delete events.
+  // Must be always active so deletions are persisted even when no chat screen
+  // is open. Mirrors the same guarantee as _globalMsgSub.
+  StreamSubscription<Map<String, dynamic>>? _globalDeleteSub;
+
   AuthNotifier(
       this._api, this._enc, this._socket, this._db, this._biometricService)
       : super(const AuthState());
@@ -287,6 +292,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
       },
     );
     AppLogger.i('Global message listener registered ✓', tag: 'AUTH');
+
+    // ── Global deletion listener ────────────────────────────────────────────
+    // Always-on: persists incoming delete-for-everyone events to the local DB
+    // so that the correct placeholder is shown even if the chat screen is not
+    // open when the event arrives (or when it is flushed from the queue on
+    // reconnect). ChatNotifier then refreshes from DB via _refreshFromDb().
+    _globalDeleteSub?.cancel();
+    _globalDeleteSub = _socket.deletedMessageStream.listen((data) async {
+      final msgId = data['messageId'] as String?;
+      if (msgId == null) return;
+      AppLogger.i(
+        'GLOBAL DELETE: persisting isDeleted for msgId=$msgId',
+        tag: 'AUTH',
+      );
+      try {
+        await _db.deleteMessageForEveryone(msgId);
+        // Signal ChatNotifier to refresh if it is currently watching this
+        // conversation. We don't know the senderId here so we broadcast an
+        // empty-string marker; ChatNotifier filters by peerId anyway.
+        _socket.notifyMessageProcessed(data['deletedBy'] as String? ?? '');
+      } catch (e) {
+        AppLogger.e('GLOBAL DELETE: failed to persist deletion',
+            tag: 'AUTH', error: e);
+      }
+    });
+    AppLogger.i('Global deletion listener registered ✓', tag: 'AUTH');
   }
 
   Future<void> _saveToDb(ChatMessage msg) async {
@@ -445,6 +476,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     AppLogger.i('Logging out user: ${state.userId}', tag: 'AUTH');
     await _globalMsgSub?.cancel();
     _globalMsgSub = null;
+    await _globalDeleteSub?.cancel();
+    _globalDeleteSub = null;
 
     await _biometricService
         .disableBiometric(); // <--- FIX: Disable biometric on logout
@@ -569,9 +602,14 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     // while we're awaiting the initial DB read (race-condition prevention).
     _msgSub?.cancel();
     _msgSub = _socket.processedMessageStream
-        .where((senderId) => senderId == peerId)
+        // Accept normal message events (senderId == peerId) AND the
+        // empty-string marker that AuthNotifier's global deletion listener
+        // emits after persisting a remote delete — so the UI refreshes.
+        .where((senderId) => senderId == peerId || senderId.isEmpty)
         .listen((_) => _refreshFromDb());
     AppLogger.d('processedMessageStream subscribed ✓', tag: 'CHAT');
+    // Deletion DB persistence is handled by AuthNotifier._globalDeleteSub
+    // which also notifies this stream via notifyMessageProcessed('').
 
     // Load existing messages from local DB into UI state
     await _refreshFromDb();
@@ -987,6 +1025,46 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         error: e,
       );
     }
+  }
+
+  // ── Delete messages ────────────────────────────────────────────────────────
+
+  /// Deletes [messages] either for the current user only (`deleteFor = 'me'`)
+  /// or for everyone (`deleteFor = 'everyone'`).  When deleting for everyone
+  /// a `message:delete` socket event is sent to the relay for each message.
+  Future<void> deleteMessages(
+    List<ChatMessage> msgs, {
+    required String deleteFor, // 'me' | 'everyone'
+  }) async {
+    for (final msg in msgs) {
+      if (deleteFor == 'everyone') {
+        await _db.deleteMessageForEveryone(msg.id);
+        _socket.sendDeleteEvent(
+          messageId: msg.id,
+          recipientId: msg.recipientId,
+          deleteFor: 'everyone',
+        );
+        AppLogger.i(
+          'Deleted for everyone — id:${msg.id}',
+          tag: 'CHAT',
+        );
+      } else {
+        await _db.deleteMessageForMe(msg.id);
+        AppLogger.i(
+          'Deleted for me — id:${msg.id}',
+          tag: 'CHAT',
+        );
+      }
+    }
+    // Reflect changes in UI state immediately (soft-replace, no physical removal)
+    state = state.map((m) {
+      final deleted = msgs.any((d) => d.id == m.id);
+      if (!deleted) return m;
+      return m.copyWith(
+        isDeleted: true,
+        deletedFor: deleteFor,
+      );
+    }).toList();
   }
 
   Future<void> _saveMessageToDb(ChatMessage msg) async {

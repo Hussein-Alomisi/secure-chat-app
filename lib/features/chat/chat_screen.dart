@@ -467,12 +467,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   AppBar _buildSelectionAppBar(
       BuildContext context, List<ChatMessage> allMessages) {
+    final auth = ref.read(authProvider);
+    final myId = auth.userId ?? '';
+
     final selectedMessages =
         allMessages.where((m) => _selectedMessageIds.contains(m.id)).toList();
 
     final canCopy = selectedMessages.isNotEmpty &&
         selectedMessages.every(
             (m) => m.type == MessageType.text && m.decryptedText != null);
+
+    // "Delete for everyone" is only available when ALL selected messages
+    // were sent by the current user.
+    final allMine = selectedMessages.isNotEmpty &&
+        selectedMessages.every((m) => m.senderId == myId);
 
     return AppBar(
       backgroundColor: const Color(0xFF6C63FF),
@@ -507,11 +515,84 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               );
             },
           ),
+        // ── Delete button ──────────────────────────────────────────────────
+        IconButton(
+          icon: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+          tooltip: 'حذف',
+          onPressed: () =>
+              _showDeleteDialog(context, selectedMessages, allMine),
+        ),
         IconButton(
           icon: const Icon(Icons.reply_rounded, color: Colors.white),
           onPressed: () => _showForwardDialog(context, selectedMessages),
         ),
       ],
+    );
+  }
+
+  // ─── Delete dialog ──────────────────────────────────────────────────────────
+
+  void _showDeleteDialog(
+    BuildContext context,
+    List<ChatMessage> msgs,
+    bool allMine,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF13132B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'حذف الرسائل',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'اختر نطاق الحذف لـ ${msgs.length} ${msgs.length == 1 ? "رسالة" : "رسائل"}',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        actions: [
+          // ── Cancel ───────────────────────────────────────────────────────
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          // ── Delete for me ─────────────────────────────────────────────────
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref
+                  .read(chatProvider(widget.peer.id).notifier)
+                  .deleteMessages(msgs, deleteFor: 'me');
+              setState(() => _selectedMessageIds.clear());
+            },
+            child: const Text(
+              'احذف عني',
+              style: TextStyle(color: Color(0xFF6C63FF)),
+            ),
+          ),
+          // ── Delete for everyone (only if all selected are mine) ───────────
+          if (allMine)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                ref
+                    .read(chatProvider(widget.peer.id).notifier)
+                    .deleteMessages(msgs, deleteFor: 'everyone');
+                setState(() => _selectedMessageIds.clear());
+              },
+              child: const Text(
+                'احذف للجميع',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -963,6 +1044,32 @@ class _MessageBubble extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context) {
+    // ── Deleted placeholder ────────────────────────────────────────────────
+    if (message.isDeleted) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.block_rounded,
+              size: 15,
+              color: isMe ? Colors.white54 : Colors.white38,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'تم حذف هذه الرسالة',
+              style: TextStyle(
+                color: isMe ? Colors.white60 : Colors.white38,
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     Widget content;
     switch (message.type) {
       case MessageType.text:

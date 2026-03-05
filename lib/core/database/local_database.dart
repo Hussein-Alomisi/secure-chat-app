@@ -49,6 +49,8 @@ class Messages extends Table {
       text().nullable()(); // encrypted AES key for file
   IntColumn get audioDuration => integer().nullable()(); // seconds (audio msgs)
   BoolColumn get isForwarded => boolean().withDefault(const Constant(false))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  TextColumn get deletedFor => text().nullable()(); // 'me' | 'everyone'
   TextColumn get status => text().withDefault(const Constant('sending'))();
   // 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
   TextColumn get timestamp => text()();
@@ -64,7 +66,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -85,6 +87,15 @@ class LocalDatabase extends _$LocalDatabase {
             // Add isForwarded column
             await migrator.database.customStatement(
               'ALTER TABLE messages ADD COLUMN is_forwarded INTEGER DEFAULT 0;',
+            );
+          }
+          if (from < 5) {
+            // Add deletion tracking columns
+            await migrator.database.customStatement(
+              'ALTER TABLE messages ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;',
+            );
+            await migrator.database.customStatement(
+              'ALTER TABLE messages ADD COLUMN deleted_for TEXT;',
             );
           }
         },
@@ -213,6 +224,26 @@ class LocalDatabase extends _$LocalDatabase {
   Future<void> updateMessageLocalPath(String messageId, String localPath) {
     return (update(messages)..where((m) => m.id.equals(messageId)))
         .write(MessagesCompanion(localFilePath: Value(localPath)));
+  }
+
+  /// Mark a message as deleted locally (only hidden for the current user).
+  Future<void> deleteMessageForMe(String messageId) {
+    return (update(messages)..where((m) => m.id.equals(messageId))).write(
+      const MessagesCompanion(
+        isDeleted: Value(true),
+        deletedFor: Value('me'),
+      ),
+    );
+  }
+
+  /// Mark a message as deleted for everyone (both sides see placeholder).
+  Future<void> deleteMessageForEveryone(String messageId) {
+    return (update(messages)..where((m) => m.id.equals(messageId))).write(
+      const MessagesCompanion(
+        isDeleted: Value(true),
+        deletedFor: Value('everyone'),
+      ),
+    );
   }
 
   Future<Message?> getMessageById(String id) {

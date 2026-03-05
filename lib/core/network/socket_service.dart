@@ -10,12 +10,12 @@ typedef TypingCallback = void Function(String userId, bool isTyping);
 class SocketService {
   static const _tag = 'SOCKET';
 
-  // static const String _serverUrl = String.fromEnvironment(
-  //   'SERVER_URL',
-  //   defaultValue: 'http://192.168.0.183:3000',
-  // );
+  static const String _serverUrl = String.fromEnvironment(
+    'SERVER_URL',
+    defaultValue: 'http://192.168.0.183:3000',
+  );
 
-  static const String _serverUrl = 'http://18.219.24.19:3000';
+  // static const String _serverUrl = 'http://18.219.24.19:3000';
 
   IO.Socket? _socket;
   bool _isConnected = false;
@@ -25,10 +25,17 @@ class SocketService {
   // Fires AFTER AuthNotifier has saved the message to DB — no race condition.
   final _processedController = StreamController<String>.broadcast(); // senderId
 
+  // Fires when the server notifies us that a message was deleted for everyone.
+  final _deletedController = StreamController<Map<String, dynamic>>.broadcast();
+
   Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
 
   /// Emits the senderId after a message is fully processed and stored in DB.
   Stream<String> get processedMessageStream => _processedController.stream;
+
+  /// Emits `{ messageId, deletedBy }` when a remote `message:deleted` event arrives.
+  Stream<Map<String, dynamic>> get deletedMessageStream =>
+      _deletedController.stream;
 
   /// Called by AuthNotifier after each message is decrypted + saved to DB.
   void notifyMessageProcessed(String senderId) {
@@ -196,6 +203,17 @@ class SocketService {
       }
     });
 
+    // ── message:deleted (delete-for-everyone from remote user) ───────────────
+    _socket!.on('message:deleted', (data) {
+      AppLogger.d(
+        'message:deleted received — id:${data['messageId']}',
+        tag: _tag,
+      );
+      if (data is Map<String, dynamic>) {
+        _deletedController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
     // ── typing ────────────────────────────────────────────────────────────────
     _socket!.on('typing:start', (data) {
       if (data is Map<String, dynamic>) {
@@ -293,6 +311,24 @@ class SocketService {
     _socket?.emit('typing:stop', {'recipientId': recipientId});
   }
 
+  /// Emit `message:delete` to the relay server.
+  /// [deleteFor] is either `"me"` (local-only, no broadcast) or `"everyone"`.
+  void sendDeleteEvent({
+    required String messageId,
+    required String recipientId,
+    required String deleteFor,
+  }) {
+    AppLogger.d(
+      'sendDeleteEvent id:$messageId deleteFor:$deleteFor',
+      tag: _tag,
+    );
+    _socket?.emit('message:delete', {
+      'messageId': messageId,
+      'recipientId': recipientId,
+      'deleteFor': deleteFor,
+    });
+  }
+
   void disconnect() {
     AppLogger.i('disconnect() called — socketId:${_socket?.id}', tag: _tag);
     _socket?.disconnect();
@@ -305,6 +341,7 @@ class SocketService {
     AppLogger.d('SocketService.dispose()', tag: _tag);
     _messageController.close();
     _processedController.close();
+    _deletedController.close();
     disconnect();
   }
 }

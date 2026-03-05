@@ -788,6 +788,22 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_forwarded" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _deletedForMeta =
+      const VerificationMeta('deletedFor');
+  @override
+  late final GeneratedColumn<String> deletedFor = GeneratedColumn<String>(
+      'deleted_for', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
@@ -819,6 +835,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         encryptedKey,
         audioDuration,
         isForwarded,
+        isDeleted,
+        deletedFor,
         status,
         timestamp
       ];
@@ -920,6 +938,16 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           isForwarded.isAcceptableOrUnknown(
               data['is_forwarded']!, _isForwardedMeta));
     }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
+    if (data.containsKey('deleted_for')) {
+      context.handle(
+          _deletedForMeta,
+          deletedFor.isAcceptableOrUnknown(
+              data['deleted_for']!, _deletedForMeta));
+    }
     if (data.containsKey('status')) {
       context.handle(_statusMeta,
           status.isAcceptableOrUnknown(data['status']!, _statusMeta));
@@ -971,6 +999,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           .read(DriftSqlType.int, data['${effectivePrefix}audio_duration']),
       isForwarded: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_forwarded'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      deletedFor: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}deleted_for']),
       status: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
       timestamp: attachedDatabase.typeMapping
@@ -1001,6 +1033,8 @@ class Message extends DataClass implements Insertable<Message> {
   final String? encryptedKey;
   final int? audioDuration;
   final bool isForwarded;
+  final bool isDeleted;
+  final String? deletedFor;
   final String status;
   final String timestamp;
   const Message(
@@ -1020,6 +1054,8 @@ class Message extends DataClass implements Insertable<Message> {
       this.encryptedKey,
       this.audioDuration,
       required this.isForwarded,
+      required this.isDeleted,
+      this.deletedFor,
       required this.status,
       required this.timestamp});
   @override
@@ -1061,6 +1097,10 @@ class Message extends DataClass implements Insertable<Message> {
       map['audio_duration'] = Variable<int>(audioDuration);
     }
     map['is_forwarded'] = Variable<bool>(isForwarded);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || deletedFor != null) {
+      map['deleted_for'] = Variable<String>(deletedFor);
+    }
     map['status'] = Variable<String>(status);
     map['timestamp'] = Variable<String>(timestamp);
     return map;
@@ -1101,6 +1141,10 @@ class Message extends DataClass implements Insertable<Message> {
           ? const Value.absent()
           : Value(audioDuration),
       isForwarded: Value(isForwarded),
+      isDeleted: Value(isDeleted),
+      deletedFor: deletedFor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedFor),
       status: Value(status),
       timestamp: Value(timestamp),
     );
@@ -1126,6 +1170,8 @@ class Message extends DataClass implements Insertable<Message> {
       encryptedKey: serializer.fromJson<String?>(json['encryptedKey']),
       audioDuration: serializer.fromJson<int?>(json['audioDuration']),
       isForwarded: serializer.fromJson<bool>(json['isForwarded']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      deletedFor: serializer.fromJson<String?>(json['deletedFor']),
       status: serializer.fromJson<String>(json['status']),
       timestamp: serializer.fromJson<String>(json['timestamp']),
     );
@@ -1150,6 +1196,8 @@ class Message extends DataClass implements Insertable<Message> {
       'encryptedKey': serializer.toJson<String?>(encryptedKey),
       'audioDuration': serializer.toJson<int?>(audioDuration),
       'isForwarded': serializer.toJson<bool>(isForwarded),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'deletedFor': serializer.toJson<String?>(deletedFor),
       'status': serializer.toJson<String>(status),
       'timestamp': serializer.toJson<String>(timestamp),
     };
@@ -1172,6 +1220,8 @@ class Message extends DataClass implements Insertable<Message> {
           Value<String?> encryptedKey = const Value.absent(),
           Value<int?> audioDuration = const Value.absent(),
           bool? isForwarded,
+          bool? isDeleted,
+          Value<String?> deletedFor = const Value.absent(),
           String? status,
           String? timestamp}) =>
       Message(
@@ -1197,6 +1247,8 @@ class Message extends DataClass implements Insertable<Message> {
         audioDuration:
             audioDuration.present ? audioDuration.value : this.audioDuration,
         isForwarded: isForwarded ?? this.isForwarded,
+        isDeleted: isDeleted ?? this.isDeleted,
+        deletedFor: deletedFor.present ? deletedFor.value : this.deletedFor,
         status: status ?? this.status,
         timestamp: timestamp ?? this.timestamp,
       );
@@ -1232,6 +1284,9 @@ class Message extends DataClass implements Insertable<Message> {
           : this.audioDuration,
       isForwarded:
           data.isForwarded.present ? data.isForwarded.value : this.isForwarded,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      deletedFor:
+          data.deletedFor.present ? data.deletedFor.value : this.deletedFor,
       status: data.status.present ? data.status.value : this.status,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
     );
@@ -1256,6 +1311,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('encryptedKey: $encryptedKey, ')
           ..write('audioDuration: $audioDuration, ')
           ..write('isForwarded: $isForwarded, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('deletedFor: $deletedFor, ')
           ..write('status: $status, ')
           ..write('timestamp: $timestamp')
           ..write(')'))
@@ -1280,6 +1337,8 @@ class Message extends DataClass implements Insertable<Message> {
       encryptedKey,
       audioDuration,
       isForwarded,
+      isDeleted,
+      deletedFor,
       status,
       timestamp);
   @override
@@ -1302,6 +1361,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.encryptedKey == this.encryptedKey &&
           other.audioDuration == this.audioDuration &&
           other.isForwarded == this.isForwarded &&
+          other.isDeleted == this.isDeleted &&
+          other.deletedFor == this.deletedFor &&
           other.status == this.status &&
           other.timestamp == this.timestamp);
 }
@@ -1323,6 +1384,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> encryptedKey;
   final Value<int?> audioDuration;
   final Value<bool> isForwarded;
+  final Value<bool> isDeleted;
+  final Value<String?> deletedFor;
   final Value<String> status;
   final Value<String> timestamp;
   final Value<int> rowid;
@@ -1343,6 +1406,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.encryptedKey = const Value.absent(),
     this.audioDuration = const Value.absent(),
     this.isForwarded = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.deletedFor = const Value.absent(),
     this.status = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1364,6 +1429,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.encryptedKey = const Value.absent(),
     this.audioDuration = const Value.absent(),
     this.isForwarded = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.deletedFor = const Value.absent(),
     this.status = const Value.absent(),
     required String timestamp,
     this.rowid = const Value.absent(),
@@ -1390,6 +1457,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? encryptedKey,
     Expression<int>? audioDuration,
     Expression<bool>? isForwarded,
+    Expression<bool>? isDeleted,
+    Expression<String>? deletedFor,
     Expression<String>? status,
     Expression<String>? timestamp,
     Expression<int>? rowid,
@@ -1411,6 +1480,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (encryptedKey != null) 'encrypted_key': encryptedKey,
       if (audioDuration != null) 'audio_duration': audioDuration,
       if (isForwarded != null) 'is_forwarded': isForwarded,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (deletedFor != null) 'deleted_for': deletedFor,
       if (status != null) 'status': status,
       if (timestamp != null) 'timestamp': timestamp,
       if (rowid != null) 'rowid': rowid,
@@ -1434,6 +1505,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       Value<String?>? encryptedKey,
       Value<int?>? audioDuration,
       Value<bool>? isForwarded,
+      Value<bool>? isDeleted,
+      Value<String?>? deletedFor,
       Value<String>? status,
       Value<String>? timestamp,
       Value<int>? rowid}) {
@@ -1454,6 +1527,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       encryptedKey: encryptedKey ?? this.encryptedKey,
       audioDuration: audioDuration ?? this.audioDuration,
       isForwarded: isForwarded ?? this.isForwarded,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedFor: deletedFor ?? this.deletedFor,
       status: status ?? this.status,
       timestamp: timestamp ?? this.timestamp,
       rowid: rowid ?? this.rowid,
@@ -1511,6 +1586,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (isForwarded.present) {
       map['is_forwarded'] = Variable<bool>(isForwarded.value);
     }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (deletedFor.present) {
+      map['deleted_for'] = Variable<String>(deletedFor.value);
+    }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
@@ -1542,6 +1623,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('encryptedKey: $encryptedKey, ')
           ..write('audioDuration: $audioDuration, ')
           ..write('isForwarded: $isForwarded, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('deletedFor: $deletedFor, ')
           ..write('status: $status, ')
           ..write('timestamp: $timestamp, ')
           ..write('rowid: $rowid')
@@ -1892,6 +1975,8 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> encryptedKey,
   Value<int?> audioDuration,
   Value<bool> isForwarded,
+  Value<bool> isDeleted,
+  Value<String?> deletedFor,
   Value<String> status,
   required String timestamp,
   Value<int> rowid,
@@ -1913,6 +1998,8 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> encryptedKey,
   Value<int?> audioDuration,
   Value<bool> isForwarded,
+  Value<bool> isDeleted,
+  Value<String?> deletedFor,
   Value<String> status,
   Value<String> timestamp,
   Value<int> rowid,
@@ -1951,6 +2038,8 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String?> encryptedKey = const Value.absent(),
             Value<int?> audioDuration = const Value.absent(),
             Value<bool> isForwarded = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<String?> deletedFor = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<String> timestamp = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -1972,6 +2061,8 @@ class $$MessagesTableTableManager extends RootTableManager<
             encryptedKey: encryptedKey,
             audioDuration: audioDuration,
             isForwarded: isForwarded,
+            isDeleted: isDeleted,
+            deletedFor: deletedFor,
             status: status,
             timestamp: timestamp,
             rowid: rowid,
@@ -1993,6 +2084,8 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String?> encryptedKey = const Value.absent(),
             Value<int?> audioDuration = const Value.absent(),
             Value<bool> isForwarded = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<String?> deletedFor = const Value.absent(),
             Value<String> status = const Value.absent(),
             required String timestamp,
             Value<int> rowid = const Value.absent(),
@@ -2014,6 +2107,8 @@ class $$MessagesTableTableManager extends RootTableManager<
             encryptedKey: encryptedKey,
             audioDuration: audioDuration,
             isForwarded: isForwarded,
+            isDeleted: isDeleted,
+            deletedFor: deletedFor,
             status: status,
             timestamp: timestamp,
             rowid: rowid,
@@ -2096,6 +2191,16 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<bool> get isForwarded => $state.composableBuilder(
       column: $state.table.isForwarded,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get isDeleted => $state.composableBuilder(
+      column: $state.table.isDeleted,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get deletedFor => $state.composableBuilder(
+      column: $state.table.deletedFor,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -2197,6 +2302,16 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<bool> get isForwarded => $state.composableBuilder(
       column: $state.table.isForwarded,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get isDeleted => $state.composableBuilder(
+      column: $state.table.isDeleted,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get deletedFor => $state.composableBuilder(
+      column: $state.table.deletedFor,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
