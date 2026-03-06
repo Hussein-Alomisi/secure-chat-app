@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "226982355608",
+    "project_id": "chat-865ee",
+    "storage_bucket": "chat-865ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:226982355608:android:4d4bb2e9940149358d66ed",
+        "android_client_info": {
+          "package_name": "com.securechat.securechat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgBWhY9opyDr25DSiTtiucf9reRWQVeWo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

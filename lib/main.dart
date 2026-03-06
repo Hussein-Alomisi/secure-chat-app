@@ -5,12 +5,17 @@ import 'package:google_fonts/google_fonts.dart';
 import 'features/auth/login_screen.dart';
 import 'features/chat/chat_list_screen.dart';
 import 'providers/app_providers.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Lock to portrait for security
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   runApp(const ProviderScope(child: SecureChatApp()));
 }
