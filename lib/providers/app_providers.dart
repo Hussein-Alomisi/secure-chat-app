@@ -14,6 +14,7 @@ import '../core/utils/app_logger.dart';
 import 'package:drift/drift.dart';
 import '../core/auth/biometric_service.dart';
 import '../core/audio/audio_playback_manager.dart';
+import '../services/notification_service.dart';
 
 // ─── Service Providers (Singletons) ──────────────────────────────────────────
 
@@ -107,6 +108,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // Must be always active so deletions are persisted even when no chat screen
   // is open. Mirrors the same guarantee as _globalMsgSub.
   StreamSubscription<Map<String, dynamic>>? _globalDeleteSub;
+
+  String? currentActiveChatId;
 
   AuthNotifier(
       this._api, this._enc, this._socket, this._db, this._biometricService)
@@ -246,7 +249,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           String preview;
           switch (msg.type) {
             case MessageType.text:
-              preview = '🔒 رسالة مشفرة';
+              preview = '🔒 رسالة رسالة ';
               break;
             case MessageType.audio:
               preview = '🎤 رسالة صوتية';
@@ -267,6 +270,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
           // STEP 5: Ack + notify ChatNotifier the DB is ready
           _socket.sendDeliveredAck(msg.id, msg.senderId);
           _socket.notifyMessageProcessed(msg.senderId);
+
+          if (currentActiveChatId != msg.senderId) {
+            final senderDetails = await _db.getUserById(msg.senderId);
+            final senderName = senderDetails?.name ?? msg.senderId;
+            NotificationService().showForegroundNotification(
+              title: senderName,
+              body: preview,
+              chatId: msg.senderId,
+            );
+          }
           AppLogger.i(
             '╔══ GLOBAL: msg ${msg.id} COMPLETE ✓ ══╗\n'
             '│ saved to DB, ack sent, UI notified\n'
@@ -378,6 +391,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       AppLogger.d('Encryption keys loaded', tag: 'AUTH');
       _socket.connect(token);
       _startGlobalMessageListener(userId);
+      NotificationService().sendTokenToBackend(userId, _api);
       state = AuthState(
         isLoggedIn: true,
         userId: userId,
@@ -429,6 +443,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       _socket.connect(token);
       _startGlobalMessageListener(user['id'] as String);
+      NotificationService().sendTokenToBackend(user['id'] as String, _api);
 
       state = state.copyWith(
         isLoggedIn: true,

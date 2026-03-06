@@ -46,9 +46,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   static const double _cancelThreshold = 80.0;
 
+  late final AuthNotifier _authNotifier;
+
   @override
   void initState() {
     super.initState();
+    _authNotifier = ref.read(authProvider.notifier);
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -57,6 +61,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authNotifier.currentActiveChatId = widget.peer.id;
       ref.read(chatProvider(widget.peer.id).notifier).initialize();
       _scrollToBottom();
     });
@@ -64,6 +69,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   void dispose() {
+    _authNotifier.currentActiveChatId = null;
+
     _textController.dispose();
     _scrollController.dispose();
     _recordingTimer?.cancel();

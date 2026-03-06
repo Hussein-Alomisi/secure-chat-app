@@ -9,11 +9,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:securechat/main.dart';
+import 'package:securechat/services/notification_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const SecureChatApp());
+    final ns = NotificationService();
+    await tester.pumpWidget(
+        ProviderScope(child: SecureChatApp(notificationService: ns)));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

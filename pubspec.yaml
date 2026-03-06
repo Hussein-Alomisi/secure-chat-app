@@ -65,6 +65,10 @@ dependencies:
   record: ^6.1.1
   just_audio: ^0.9.36
   firebase_core: ^4.5.0
+  
+  # notifications
+  firebase_messaging: 16.1.2
+  flutter_local_notifications: ^20.1.0
 
 dev_dependencies:
   flutter_test:

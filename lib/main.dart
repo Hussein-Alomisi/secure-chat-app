@@ -8,6 +8,8 @@ import 'providers/app_providers.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
+import 'services/notification_service.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -17,11 +19,17 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  runApp(const ProviderScope(child: SecureChatApp()));
+  final notificationService = NotificationService();
+  await notificationService.init();
+
+  runApp(ProviderScope(
+      child: SecureChatApp(notificationService: notificationService)));
 }
 
 class SecureChatApp extends ConsumerStatefulWidget {
-  const SecureChatApp({super.key});
+  final NotificationService notificationService;
+
+  const SecureChatApp({required this.notificationService, super.key});
 
   @override
   ConsumerState<SecureChatApp> createState() => _SecureChatAppState();
@@ -43,6 +51,7 @@ class _SecureChatAppState extends ConsumerState<SecureChatApp> {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
+      navigatorKey: widget.notificationService.navigatorKey,
       title: 'SecureChat',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
