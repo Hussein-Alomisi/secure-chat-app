@@ -87,7 +87,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _sendText() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
+
     _textController.clear();
+    setState(() {
+      _isTyping = false;
+    });
     await ref.read(chatProvider(widget.peer.id).notifier).sendText(text);
     _scrollToBottom();
   }
@@ -798,13 +802,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.arrow_back_ios_rounded,
-                            color: Colors.white38, size: 13),
-                        SizedBox(width: 2),
-                        Text(
-                          'اسحب للإلغاء',
-                          style: TextStyle(color: Colors.white38, fontSize: 12),
-                        ),
+                        // Icon(Icons.arrow_back_ios_rounded,
+                        //     color: Colors.white38, size: 13),
+                        // SizedBox(width: 2),
+                        // Text(
+                        //   'اسحب للإلغاء',
+                        //   style: TextStyle(color: Colors.white38, fontSize: 12),
+                        // ),
                       ],
                     ),
                   ),
