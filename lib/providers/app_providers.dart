@@ -583,6 +583,18 @@ class UsersNotifier extends StateNotifier<AsyncValue<List<AppUserModel>>> {
       final users = rawUsers.map((u) => AppUserModel.fromJson(u)).toList();
       state = AsyncValue.data(users);
 
+      for (final user in users) {
+        await _db.upsertUser(
+          AppUsersCompanion(
+            id: Value(user.id),
+            name: Value(user.name),
+            avatarColor: Value(user.avatarColor),
+            avatarUrl: Value(user.avatarUrl),
+            publicKey: Value(user.publicKey),
+          ),
+        );
+      }
+
       _socket.onPresenceChanged = (userId, isOnline, lastSeen) {
         if (state is AsyncData<List<AppUserModel>>) {
           final currentUsers = state.value!;
