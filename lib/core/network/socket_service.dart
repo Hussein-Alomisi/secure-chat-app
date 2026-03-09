@@ -6,6 +6,7 @@ typedef StatusCallback = void Function(String messageId, String status);
 typedef PresenceCallback = void Function(
     String userId, bool isOnline, String? lastSeen);
 typedef TypingCallback = void Function(String userId, bool isTyping);
+typedef ProfileUpdatedCallback = void Function(Map<String, dynamic> data);
 
 class SocketService {
   static const _tag = 'SOCKET';
@@ -48,6 +49,7 @@ class SocketService {
   StatusCallback? onMessageStatusChanged;
   PresenceCallback? onPresenceChanged;
   TypingCallback? onTypingChanged;
+  ProfileUpdatedCallback? onProfileUpdated;
 
   bool get isConnected => _isConnected;
 
@@ -225,6 +227,15 @@ class SocketService {
     _socket!.on('typing:stop', (data) {
       if (data is Map<String, dynamic>) {
         onTypingChanged?.call(data['userId'] as String, false);
+      }
+    });
+
+    // ── profile update ────────────────────────────────────────────────────────
+    _socket!.on('user_profile_updated', (data) {
+      if (data is Map<String, dynamic>) {
+        AppLogger.d('user_profile_updated received — user:${data['userId']}',
+            tag: _tag);
+        onProfileUpdated?.call(Map<String, dynamic>.from(data));
       }
     });
 

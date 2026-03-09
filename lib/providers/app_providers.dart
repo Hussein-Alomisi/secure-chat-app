@@ -60,14 +60,22 @@ class AuthState {
   final String? userId;
   final String? userName;
   final String? avatarColor;
+  final String? avatarUrl;
   final bool isLoading;
   final String? error;
+
+  String? get fullAvatarUrl {
+    if (avatarUrl == null) return null;
+    if (avatarUrl!.startsWith('http')) return avatarUrl;
+    return '${ApiService.serverUrl}$avatarUrl';
+  }
 
   const AuthState({
     this.isLoggedIn = false,
     this.userId,
     this.userName,
     this.avatarColor,
+    this.avatarUrl,
     this.isLoading = false,
     this.error,
   });
@@ -77,6 +85,7 @@ class AuthState {
     String? userId,
     String? userName,
     String? avatarColor,
+    String? avatarUrl,
     bool? isLoading,
     String? error,
   }) =>
@@ -85,6 +94,7 @@ class AuthState {
         userId: userId ?? this.userId,
         userName: userName ?? this.userName,
         avatarColor: avatarColor ?? this.avatarColor,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
         isLoading: isLoading ?? this.isLoading,
         error: error,
       );
@@ -249,7 +259,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           String preview;
           switch (msg.type) {
             case MessageType.text:
-              preview = '🔒 رسالة رسالة ';
+              preview = ' رسالة جديدة ';
               break;
             case MessageType.audio:
               preview = '🎤 رسالة صوتية';
@@ -365,6 +375,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final userId = await _storage.read(key: 'user_id');
     final userName = await _storage.read(key: 'user_name');
     final avatarColor = await _storage.read(key: 'avatar_color');
+    final avatarUrl = await _storage.read(key: 'avatar_url');
 
     if (token != null && userId != null) {
       AppLogger.i('Found saved session — userId: $userId', tag: 'AUTH');
@@ -397,6 +408,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userId,
         userName: userName,
         avatarColor: avatarColor,
+        avatarUrl: avatarUrl,
       );
       AppLogger.i(
         'Auto-login successful — welcome back $userName',
@@ -437,6 +449,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         key: 'avatar_color',
         value: user['avatarColor'] as String? ?? '#6C63FF',
       );
+      if (user['avatarUrl'] != null) {
+        await _storage.write(
+            key: 'avatar_url', value: user['avatarUrl'] as String);
+      }
 
       _api.setToken(token);
       AppLogger.d('JWT token applied to API service', tag: 'AUTH');
@@ -450,6 +466,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: user['id'] as String,
         userName: user['name'] as String,
         avatarColor: user['avatarColor'] as String?,
+        avatarUrl: user['avatarUrl'] as String?,
         isLoading: false,
       );
       AppLogger.i('Login complete — welcome ${user['name']}!', tag: 'AUTH');
@@ -501,11 +518,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.delete(key: 'user_id');
     await _storage.delete(key: 'user_name');
     await _storage.delete(key: 'avatar_color');
+    await _storage.delete(key: 'avatar_url');
     _api.clearToken();
     _socket.disconnect();
 
     state = const AuthState();
     AppLogger.i('Logout complete — all credentials cleared', tag: 'AUTH');
+  }
+
+  Future<void> updateProfile({required String name, String? imagePath}) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      if (imagePath != null) {
+        await _api.uploadAvatar(filePath: imagePath);
+      }
+      final result = await _api.updateProfile(name: name);
+      final updatedUser = result['user'] as Map<String, dynamic>;
+
+      await _storage.write(
+          key: 'user_name', value: updatedUser['name'] as String);
+      if (updatedUser['avatarUrl'] != null) {
+        await _storage.write(
+            key: 'avatar_url', value: updatedUser['avatarUrl'] as String);
+      }
+
+      state = state.copyWith(
+        userName: updatedUser['name'] as String,
+        avatarUrl: updatedUser['avatarUrl'] as String?,
+        isLoading: false,
+      );
+      AppLogger.i('Profile updated!', tag: 'AUTH');
+    } catch (e) {
+      AppLogger.e('Profile update failed', tag: 'AUTH', error: e);
+      state = state.copyWith(isLoading: false, error: 'فشل تحديث الملف الشخصي');
+    }
   }
 }
 
@@ -524,8 +570,10 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 class UsersNotifier extends StateNotifier<AsyncValue<List<AppUserModel>>> {
   final ApiService _api;
   final SocketService _socket;
+  final LocalDatabase _db;
 
-  UsersNotifier(this._api, this._socket) : super(const AsyncValue.loading()) {
+  UsersNotifier(this._api, this._socket, this._db)
+      : super(const AsyncValue.loading()) {
     _init();
   }
 
@@ -548,6 +596,36 @@ class UsersNotifier extends StateNotifier<AsyncValue<List<AppUserModel>>> {
           );
         }
       };
+
+      _socket.onProfileUpdated = (data) async {
+        if (state is AsyncData<List<AppUserModel>>) {
+          final currentUsers = state.value!;
+          final updatedUserId = data['userId'] as String;
+          final updatedName = data['name'] as String;
+          final updatedAvatarUrl = data['avatarUrl'] as String?;
+
+          state = AsyncValue.data(
+            currentUsers.map((u) {
+              if (u.id == updatedUserId) {
+                return u.copyWith(
+                    name: updatedName, avatarUrl: updatedAvatarUrl);
+              }
+              return u;
+            }).toList(),
+          );
+
+          final userInDb = await _db.getUserById(updatedUserId);
+          if (userInDb != null) {
+            await _db.upsertUser(
+              AppUsersCompanion(
+                id: Value(updatedUserId),
+                name: Value(updatedName),
+                avatarUrl: Value(updatedAvatarUrl),
+              ),
+            );
+          }
+        }
+      };
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -564,6 +642,7 @@ final usersProvider =
   return UsersNotifier(
     ref.watch(apiServiceProvider),
     ref.watch(socketServiceProvider),
+    ref.watch(localDatabaseProvider),
   );
 });
 
@@ -698,7 +777,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       await _db.updateMessageStatus(msgId, newStatus.name);
       await _db.updateConversationLastMessage(
         _conversationId!,
-        '🔒 رسالة مشفرة',
+        '🔒 رسالة جديدة',
         DateTime.now().toIso8601String(),
       );
       state = state

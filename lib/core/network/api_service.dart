@@ -9,7 +9,7 @@ import 'package:uuid/uuid.dart';
 const Duration _kFileTransferTimeout = Duration(hours: 12);
 
 class ApiService {
-  static const String _serverUrl = String.fromEnvironment(
+  static const String serverUrl = String.fromEnvironment(
     'SERVER_URL',
     defaultValue: 'http://192.168.0.183:3000',
   );
@@ -21,7 +21,7 @@ class ApiService {
 
   ApiService() {
     _dio = Dio(BaseOptions(
-      baseUrl: '$_serverUrl/api',
+      baseUrl: '$serverUrl/api',
       connectTimeout: const Duration(seconds: 30),
       // Upload/download of up to 4.2 GB needs generous timeouts.
       // These apply per-request and are overridden per-call where needed.
@@ -96,6 +96,19 @@ class ApiService {
     } catch (e) {
       debugPrint('[API] Error updating FCM token: $e');
     }
+  }
+
+  Future<Map<String, dynamic>> updateProfile({required String name}) async {
+    final response = await _dio.put('/auth/profile', data: {'name': name});
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<String> uploadAvatar({required String filePath}) async {
+    final formData = FormData.fromMap({
+      'avatar': await MultipartFile.fromFile(filePath),
+    });
+    final response = await _dio.post('/auth/profile/avatar', data: formData);
+    return response.data['avatarUrl'] as String;
   }
 
   // ── File Upload / Download ─────────────────────────────────────────────────

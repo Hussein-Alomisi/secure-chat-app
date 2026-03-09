@@ -9,6 +9,7 @@ class AppUsers extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get avatarColor => text()();
+  TextColumn get avatarUrl => text().nullable()();
   TextColumn get publicKey => text().nullable()();
   BoolColumn get isOnline => boolean().withDefault(const Constant(false))();
   TextColumn get lastSeen => text().nullable()();
@@ -66,7 +67,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -96,6 +97,11 @@ class LocalDatabase extends _$LocalDatabase {
             );
             await migrator.database.customStatement(
               'ALTER TABLE messages ADD COLUMN deleted_for TEXT;',
+            );
+          }
+          if (from < 6) {
+            await migrator.database.customStatement(
+              'ALTER TABLE app_users ADD COLUMN avatar_url TEXT;',
             );
           }
         },

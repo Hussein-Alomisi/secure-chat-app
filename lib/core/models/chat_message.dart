@@ -1,3 +1,5 @@
+import '../network/api_service.dart';
+
 enum MessageType { text, image, video, file, audio }
 
 enum MessageStatus { sending, sent, delivered, read, failed }
@@ -195,6 +197,7 @@ class AppUserModel {
   final String id;
   final String name;
   final String avatarColor;
+  final String? avatarUrl;
   final String? publicKey;
   final bool isOnline;
   final String? lastSeen;
@@ -203,6 +206,7 @@ class AppUserModel {
     required this.id,
     required this.name,
     required this.avatarColor,
+    this.avatarUrl,
     this.publicKey,
     this.isOnline = false,
     this.lastSeen,
@@ -213,6 +217,7 @@ class AppUserModel {
       id: json['id'] as String,
       name: json['name'] as String,
       avatarColor: json['avatarColor'] as String? ?? '#6C63FF',
+      avatarUrl: json['avatarUrl'] as String?,
       publicKey: json['publicKey'] as String?,
       isOnline: json['isOnline'] as bool? ?? false,
     );
@@ -226,11 +231,23 @@ class AppUserModel {
     return name.substring(0, name.length.clamp(1, 2)).toUpperCase();
   }
 
-  AppUserModel copyWith({bool? isOnline, String? lastSeen, String? publicKey}) {
+  String? get fullAvatarUrl {
+    if (avatarUrl == null) return null;
+    if (avatarUrl!.startsWith('http')) return avatarUrl;
+    return '${ApiService.serverUrl}$avatarUrl';
+  }
+
+  AppUserModel copyWith(
+      {bool? isOnline,
+      String? lastSeen,
+      String? publicKey,
+      String? avatarUrl,
+      String? name}) {
     return AppUserModel(
       id: id,
-      name: name,
+      name: name ?? this.name,
       avatarColor: avatarColor,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       publicKey: publicKey ?? this.publicKey,
       isOnline: isOnline ?? this.isOnline,
       lastSeen: lastSeen ?? this.lastSeen,

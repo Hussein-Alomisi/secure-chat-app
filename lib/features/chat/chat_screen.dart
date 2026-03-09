@@ -436,14 +436,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           CircleAvatar(
             radius: 18,
             backgroundColor: peerColor.withOpacity(0.2),
-            child: Text(
-              widget.peer.initials,
-              style: TextStyle(
-                color: peerColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
+            backgroundImage: widget.peer.fullAvatarUrl != null
+                ? NetworkImage(widget.peer.fullAvatarUrl!)
+                : null,
+            child: widget.peer.fullAvatarUrl == null
+                ? Text(
+                    widget.peer.initials,
+                    style: TextStyle(
+                      color: peerColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(width: 10),
           Column(

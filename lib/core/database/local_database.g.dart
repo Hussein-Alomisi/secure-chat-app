@@ -24,6 +24,12 @@ class $AppUsersTable extends AppUsers with TableInfo<$AppUsersTable, AppUser> {
   late final GeneratedColumn<String> avatarColor = GeneratedColumn<String>(
       'avatar_color', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _avatarUrlMeta =
+      const VerificationMeta('avatarUrl');
+  @override
+  late final GeneratedColumn<String> avatarUrl = GeneratedColumn<String>(
+      'avatar_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _publicKeyMeta =
       const VerificationMeta('publicKey');
   @override
@@ -48,7 +54,7 @@ class $AppUsersTable extends AppUsers with TableInfo<$AppUsersTable, AppUser> {
       type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns =>
-      [id, name, avatarColor, publicKey, isOnline, lastSeen];
+      [id, name, avatarColor, avatarUrl, publicKey, isOnline, lastSeen];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -78,6 +84,10 @@ class $AppUsersTable extends AppUsers with TableInfo<$AppUsersTable, AppUser> {
     } else if (isInserting) {
       context.missing(_avatarColorMeta);
     }
+    if (data.containsKey('avatar_url')) {
+      context.handle(_avatarUrlMeta,
+          avatarUrl.isAcceptableOrUnknown(data['avatar_url']!, _avatarUrlMeta));
+    }
     if (data.containsKey('public_key')) {
       context.handle(_publicKeyMeta,
           publicKey.isAcceptableOrUnknown(data['public_key']!, _publicKeyMeta));
@@ -105,6 +115,8 @@ class $AppUsersTable extends AppUsers with TableInfo<$AppUsersTable, AppUser> {
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       avatarColor: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}avatar_color'])!,
+      avatarUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}avatar_url']),
       publicKey: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}public_key']),
       isOnline: attachedDatabase.typeMapping
@@ -124,6 +136,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
   final String id;
   final String name;
   final String avatarColor;
+  final String? avatarUrl;
   final String? publicKey;
   final bool isOnline;
   final String? lastSeen;
@@ -131,6 +144,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
       {required this.id,
       required this.name,
       required this.avatarColor,
+      this.avatarUrl,
       this.publicKey,
       required this.isOnline,
       this.lastSeen});
@@ -140,6 +154,9 @@ class AppUser extends DataClass implements Insertable<AppUser> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['avatar_color'] = Variable<String>(avatarColor);
+    if (!nullToAbsent || avatarUrl != null) {
+      map['avatar_url'] = Variable<String>(avatarUrl);
+    }
     if (!nullToAbsent || publicKey != null) {
       map['public_key'] = Variable<String>(publicKey);
     }
@@ -155,6 +172,9 @@ class AppUser extends DataClass implements Insertable<AppUser> {
       id: Value(id),
       name: Value(name),
       avatarColor: Value(avatarColor),
+      avatarUrl: avatarUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avatarUrl),
       publicKey: publicKey == null && nullToAbsent
           ? const Value.absent()
           : Value(publicKey),
@@ -172,6 +192,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       avatarColor: serializer.fromJson<String>(json['avatarColor']),
+      avatarUrl: serializer.fromJson<String?>(json['avatarUrl']),
       publicKey: serializer.fromJson<String?>(json['publicKey']),
       isOnline: serializer.fromJson<bool>(json['isOnline']),
       lastSeen: serializer.fromJson<String?>(json['lastSeen']),
@@ -184,6 +205,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'avatarColor': serializer.toJson<String>(avatarColor),
+      'avatarUrl': serializer.toJson<String?>(avatarUrl),
       'publicKey': serializer.toJson<String?>(publicKey),
       'isOnline': serializer.toJson<bool>(isOnline),
       'lastSeen': serializer.toJson<String?>(lastSeen),
@@ -194,6 +216,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
           {String? id,
           String? name,
           String? avatarColor,
+          Value<String?> avatarUrl = const Value.absent(),
           Value<String?> publicKey = const Value.absent(),
           bool? isOnline,
           Value<String?> lastSeen = const Value.absent()}) =>
@@ -201,6 +224,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
         id: id ?? this.id,
         name: name ?? this.name,
         avatarColor: avatarColor ?? this.avatarColor,
+        avatarUrl: avatarUrl.present ? avatarUrl.value : this.avatarUrl,
         publicKey: publicKey.present ? publicKey.value : this.publicKey,
         isOnline: isOnline ?? this.isOnline,
         lastSeen: lastSeen.present ? lastSeen.value : this.lastSeen,
@@ -211,6 +235,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
       name: data.name.present ? data.name.value : this.name,
       avatarColor:
           data.avatarColor.present ? data.avatarColor.value : this.avatarColor,
+      avatarUrl: data.avatarUrl.present ? data.avatarUrl.value : this.avatarUrl,
       publicKey: data.publicKey.present ? data.publicKey.value : this.publicKey,
       isOnline: data.isOnline.present ? data.isOnline.value : this.isOnline,
       lastSeen: data.lastSeen.present ? data.lastSeen.value : this.lastSeen,
@@ -223,6 +248,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('avatarColor: $avatarColor, ')
+          ..write('avatarUrl: $avatarUrl, ')
           ..write('publicKey: $publicKey, ')
           ..write('isOnline: $isOnline, ')
           ..write('lastSeen: $lastSeen')
@@ -231,8 +257,8 @@ class AppUser extends DataClass implements Insertable<AppUser> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, avatarColor, publicKey, isOnline, lastSeen);
+  int get hashCode => Object.hash(
+      id, name, avatarColor, avatarUrl, publicKey, isOnline, lastSeen);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -240,6 +266,7 @@ class AppUser extends DataClass implements Insertable<AppUser> {
           other.id == this.id &&
           other.name == this.name &&
           other.avatarColor == this.avatarColor &&
+          other.avatarUrl == this.avatarUrl &&
           other.publicKey == this.publicKey &&
           other.isOnline == this.isOnline &&
           other.lastSeen == this.lastSeen);
@@ -249,6 +276,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> avatarColor;
+  final Value<String?> avatarUrl;
   final Value<String?> publicKey;
   final Value<bool> isOnline;
   final Value<String?> lastSeen;
@@ -257,6 +285,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.avatarColor = const Value.absent(),
+    this.avatarUrl = const Value.absent(),
     this.publicKey = const Value.absent(),
     this.isOnline = const Value.absent(),
     this.lastSeen = const Value.absent(),
@@ -266,6 +295,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
     required String id,
     required String name,
     required String avatarColor,
+    this.avatarUrl = const Value.absent(),
     this.publicKey = const Value.absent(),
     this.isOnline = const Value.absent(),
     this.lastSeen = const Value.absent(),
@@ -277,6 +307,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? avatarColor,
+    Expression<String>? avatarUrl,
     Expression<String>? publicKey,
     Expression<bool>? isOnline,
     Expression<String>? lastSeen,
@@ -286,6 +317,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (avatarColor != null) 'avatar_color': avatarColor,
+      if (avatarUrl != null) 'avatar_url': avatarUrl,
       if (publicKey != null) 'public_key': publicKey,
       if (isOnline != null) 'is_online': isOnline,
       if (lastSeen != null) 'last_seen': lastSeen,
@@ -297,6 +329,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
       {Value<String>? id,
       Value<String>? name,
       Value<String>? avatarColor,
+      Value<String?>? avatarUrl,
       Value<String?>? publicKey,
       Value<bool>? isOnline,
       Value<String?>? lastSeen,
@@ -305,6 +338,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
       id: id ?? this.id,
       name: name ?? this.name,
       avatarColor: avatarColor ?? this.avatarColor,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       publicKey: publicKey ?? this.publicKey,
       isOnline: isOnline ?? this.isOnline,
       lastSeen: lastSeen ?? this.lastSeen,
@@ -323,6 +357,9 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
     }
     if (avatarColor.present) {
       map['avatar_color'] = Variable<String>(avatarColor.value);
+    }
+    if (avatarUrl.present) {
+      map['avatar_url'] = Variable<String>(avatarUrl.value);
     }
     if (publicKey.present) {
       map['public_key'] = Variable<String>(publicKey.value);
@@ -345,6 +382,7 @@ class AppUsersCompanion extends UpdateCompanion<AppUser> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('avatarColor: $avatarColor, ')
+          ..write('avatarUrl: $avatarUrl, ')
           ..write('publicKey: $publicKey, ')
           ..write('isOnline: $isOnline, ')
           ..write('lastSeen: $lastSeen, ')
@@ -1651,6 +1689,7 @@ typedef $$AppUsersTableCreateCompanionBuilder = AppUsersCompanion Function({
   required String id,
   required String name,
   required String avatarColor,
+  Value<String?> avatarUrl,
   Value<String?> publicKey,
   Value<bool> isOnline,
   Value<String?> lastSeen,
@@ -1660,6 +1699,7 @@ typedef $$AppUsersTableUpdateCompanionBuilder = AppUsersCompanion Function({
   Value<String> id,
   Value<String> name,
   Value<String> avatarColor,
+  Value<String?> avatarUrl,
   Value<String?> publicKey,
   Value<bool> isOnline,
   Value<String?> lastSeen,
@@ -1686,6 +1726,7 @@ class $$AppUsersTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<String> avatarColor = const Value.absent(),
+            Value<String?> avatarUrl = const Value.absent(),
             Value<String?> publicKey = const Value.absent(),
             Value<bool> isOnline = const Value.absent(),
             Value<String?> lastSeen = const Value.absent(),
@@ -1695,6 +1736,7 @@ class $$AppUsersTableTableManager extends RootTableManager<
             id: id,
             name: name,
             avatarColor: avatarColor,
+            avatarUrl: avatarUrl,
             publicKey: publicKey,
             isOnline: isOnline,
             lastSeen: lastSeen,
@@ -1704,6 +1746,7 @@ class $$AppUsersTableTableManager extends RootTableManager<
             required String id,
             required String name,
             required String avatarColor,
+            Value<String?> avatarUrl = const Value.absent(),
             Value<String?> publicKey = const Value.absent(),
             Value<bool> isOnline = const Value.absent(),
             Value<String?> lastSeen = const Value.absent(),
@@ -1713,6 +1756,7 @@ class $$AppUsersTableTableManager extends RootTableManager<
             id: id,
             name: name,
             avatarColor: avatarColor,
+            avatarUrl: avatarUrl,
             publicKey: publicKey,
             isOnline: isOnline,
             lastSeen: lastSeen,
@@ -1736,6 +1780,11 @@ class $$AppUsersTableFilterComposer
 
   ColumnFilters<String> get avatarColor => $state.composableBuilder(
       column: $state.table.avatarColor,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get avatarUrl => $state.composableBuilder(
+      column: $state.table.avatarUrl,
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
@@ -1783,6 +1832,11 @@ class $$AppUsersTableOrderingComposer
 
   ColumnOrderings<String> get avatarColor => $state.composableBuilder(
       column: $state.table.avatarColor,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get avatarUrl => $state.composableBuilder(
+      column: $state.table.avatarUrl,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 

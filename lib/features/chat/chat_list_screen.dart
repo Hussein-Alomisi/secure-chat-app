@@ -4,6 +4,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../providers/app_providers.dart';
 import '../../core/models/chat_message.dart';
 import '../chat/chat_screen.dart';
+import '../profile/profile_screen.dart';
 
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
@@ -12,6 +13,14 @@ class ChatListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final usersAsync = ref.watch(usersProvider);
+
+    Color myAvatarColor;
+    try {
+      myAvatarColor = Color(
+          int.parse((auth.avatarColor ?? '#6C63FF').replaceFirst('#', '0xFF')));
+    } catch (_) {
+      myAvatarColor = const Color(0xFF6C63FF);
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -41,12 +50,45 @@ class ChatListScreen extends ConsumerWidget {
                       shape: BoxShape.circle,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    auth.userName ?? '',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 11,
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ProfileScreen()),
+                      );
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor: myAvatarColor.withOpacity(0.2),
+                          backgroundImage: auth.fullAvatarUrl != null
+                              ? NetworkImage(auth.fullAvatarUrl!)
+                              : null,
+                          child: auth.fullAvatarUrl == null
+                              ? Text(
+                                  auth.userName?.isNotEmpty == true
+                                      ? auth.userName![0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                      color: myAvatarColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          auth.userName ?? '',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -423,14 +465,19 @@ class _ContactTile extends StatelessWidget {
           CircleAvatar(
             radius: 26,
             backgroundColor: avatarColor.withOpacity(0.2),
-            child: Text(
-              user.initials,
-              style: TextStyle(
-                color: avatarColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
+            backgroundImage: user.fullAvatarUrl != null
+                ? NetworkImage(user.fullAvatarUrl!)
+                : null,
+            child: user.fullAvatarUrl == null
+                ? Text(
+                    user.initials,
+                    style: TextStyle(
+                      color: avatarColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  )
+                : null,
           ),
           if (user.isOnline)
             Positioned(
