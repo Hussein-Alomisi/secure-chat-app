@@ -103,14 +103,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D1A),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF13132B),
+          backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
           elevation: 0,
-          title:
-              const Text('الملف الشخصي', style: TextStyle(color: Colors.white)),
+          title: Text(
+            'الملف الشخصي',
+            style: TextStyle(
+                color: Theme.of(context).appBarTheme.titleTextStyle?.color ??
+                    Colors.white),
+          ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            icon: Icon(
+              Icons.arrow_back_rounded,
+              color: Theme.of(context).appBarTheme.iconTheme?.color ??
+                  Colors.white,
+            ),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -158,12 +166,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _nameController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodyLarge?.color ??
+                    Colors.white,
+              ),
               decoration: InputDecoration(
                 labelText: 'الاسم',
-                labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                labelStyle: TextStyle(
+                  color: Theme.of(context)
+                          .textTheme
+                          .bodyLarge
+                          ?.color
+                          ?.withOpacity(0.5) ??
+                      Colors.white.withOpacity(0.5),
+                ),
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.06),
+                fillColor: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.black.withOpacity(0.04),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,

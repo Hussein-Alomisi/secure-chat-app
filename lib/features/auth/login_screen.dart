@@ -63,7 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D1A),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: FadeTransition(
           opacity: _fadeAnim,
           child: SafeArea(
@@ -102,7 +102,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     const Text(
                       'SecureChat',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFF6C63FF),
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.2,
@@ -112,7 +112,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     Text(
                       'مراسلة آمنة ومشفرة بالكامل',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
+                        color: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.color
+                                ?.withOpacity(0.5) ??
+                            Colors.white.withOpacity(0.5),
                         fontSize: 14,
                       ),
                     ),
@@ -208,9 +213,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     const SizedBox(height: 24),
 
                     // Biometric alternative
-                    const Text(
+                    Text(
                       'أو',
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                      style: TextStyle(
+                          color: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.color
+                                  ?.withOpacity(0.54) ??
+                              Colors.white54,
+                          fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
@@ -223,11 +235,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     .loginWithBiometrics();
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    // make the snackbar design similar to the app design
-                                    backgroundColor: Color(0xFF13132B),
+                                  SnackBar(
+                                    backgroundColor: Theme.of(context)
+                                        .appBarTheme
+                                        .backgroundColor,
                                     content: Text(
-                                        style: TextStyle(color: Colors.white),
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyLarge
+                                                    ?.color ??
+                                                Colors.white),
                                         'يرجى تسجيل الدخول أولاً لتفعيل البصمة لتسجيل الدخول السريع لاحقاً.'),
                                   ),
                                 );
@@ -237,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF13132B),
+                          color: Theme.of(context).cardColor,
                           shape: BoxShape.circle,
                           border: Border.all(
                               color: const Color(0xFF6C63FF).withOpacity(0.5)),
@@ -283,22 +301,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         keyboardType: keyboardType,
         textDirection: TextDirection.rtl,
         textAlign: TextAlign.right,
-        style: const TextStyle(color: Colors.white),
+        style: TextStyle(
+            color:
+                Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
         onSubmitted: onSubmitted,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.white70),
-          prefixIcon: Icon(icon, color: Colors.white38, size: 20),
+          hintStyle: TextStyle(
+            color: Theme.of(context)
+                    .textTheme
+                    .bodyLarge
+                    ?.color
+                    ?.withOpacity(0.7) ??
+                Colors.white70,
+          ),
+          prefixIcon: Icon(icon,
+              color: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.color
+                      ?.withOpacity(0.38) ??
+                  Colors.white38,
+              size: 20),
           suffixIcon: suffixIcon,
           filled: true,
-          fillColor: Colors.white.withOpacity(0.06),
+          fillColor: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withOpacity(0.06)
+              : Colors.black.withOpacity(0.04),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+            borderSide: BorderSide(
+              color: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.color
+                      ?.withOpacity(0.1) ??
+                  Colors.white.withOpacity(0.1),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+            borderSide: BorderSide(
+              color: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.color
+                      ?.withOpacity(0.1) ??
+                  Colors.white.withOpacity(0.1),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),

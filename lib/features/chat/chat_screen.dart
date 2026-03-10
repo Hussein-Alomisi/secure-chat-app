@@ -265,7 +265,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _showAttachmentMenu() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF13132B),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -342,7 +342,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
 
     return Directionality(
-      textDirection: TextDirection.ltr,
+      textDirection: TextDirection.rtl,
       child: PopScope(
         canPop: !_isSelectionMode,
         onPopInvoked: (didPop) {
@@ -351,7 +351,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           }
         },
         child: Scaffold(
-          backgroundColor: const Color(0xFF0D0D1A),
+          backgroundColor:
+              Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.9),
           appBar: _isSelectionMode
               ? _buildSelectionAppBar(context, messages)
               : _buildNormalAppBar(peerColor, currentPeer),
@@ -408,7 +409,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
               // Input bar
               Container(
-                color: const Color(0xFF13132B),
+                color: Theme.of(context).appBarTheme.backgroundColor,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: SafeArea(
                   top: false,
@@ -428,35 +429,86 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   AppBar _buildNormalAppBar(Color peerColor, AppUserModel currentPeer) {
     return AppBar(
-      backgroundColor: const Color(0xFF13132B),
+      backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
       elevation: 0,
       leadingWidth: 36,
       title: Row(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: peerColor.withOpacity(0.2),
-            backgroundImage: widget.peer.fullAvatarUrl != null
-                ? NetworkImage(widget.peer.fullAvatarUrl!)
-                : null,
-            child: widget.peer.fullAvatarUrl == null
-                ? Text(
-                    widget.peer.initials,
-                    style: TextStyle(
-                      color: peerColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  )
-                : null,
+          GestureDetector(
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Hero(
+                        tag: 'profile_pic_${widget.peer.id}',
+                        child: CircleAvatar(
+                          radius: 100,
+                          backgroundColor: peerColor.withOpacity(0.2),
+                          backgroundImage: widget.peer.fullAvatarUrl != null
+                              ? NetworkImage(widget.peer.fullAvatarUrl!)
+                              : null,
+                          child: widget.peer.fullAvatarUrl == null
+                              ? Text(
+                                  widget.peer.initials,
+                                  style: TextStyle(
+                                    color: peerColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 60,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        currentPeer.name,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodyLarge?.color ??
+                              Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            child: Hero(
+              tag: 'profile_pic_${widget.peer.id}',
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: peerColor.withOpacity(0.2),
+                backgroundImage: widget.peer.fullAvatarUrl != null
+                    ? NetworkImage(widget.peer.fullAvatarUrl!)
+                    : null,
+                child: widget.peer.fullAvatarUrl == null
+                    ? Text(
+                        widget.peer.initials,
+                        style: TextStyle(
+                          color: peerColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(widget.peer.name,
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color:
+                          Theme.of(context).appBarTheme.titleTextStyle?.color ??
+                              Colors.white,
                       fontSize: 15,
                       fontWeight: FontWeight.w600)),
               Text(
@@ -470,7 +522,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 style: TextStyle(
                   color: _peerIsTyping || currentPeer.isOnline
                       ? const Color(0xFF4ADE80)
-                      : Colors.white38,
+                      : Theme.of(context)
+                              .appBarTheme
+                              .titleTextStyle
+                              ?.color
+                              ?.withOpacity(0.38) ??
+                          Colors.white38,
                   fontSize: 11,
                 ),
               ),
@@ -499,7 +556,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         selectedMessages.every((m) => m.senderId == myId);
 
     return AppBar(
-      backgroundColor: const Color(0xFF6C63FF),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       elevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.close_rounded, color: Colors.white),
@@ -556,11 +613,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF13132B),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'حذف الرسائل',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color:
+                  Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+              fontWeight: FontWeight.bold),
         ),
         content: Text(
           'اختر نطاق الحذف لـ ${msgs.length} ${msgs.length == 1 ? "رسالة" : "رسائل"}',
@@ -583,7 +643,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               setState(() => _selectedMessageIds.clear());
             },
             child: const Text(
-              'احذف عني',
+              'الحذف لدي',
               style: TextStyle(color: Color(0xFF6C63FF)),
             ),
           ),
@@ -618,8 +678,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF13132B),
-          title: const Text('تحويل إلى', style: TextStyle(color: Colors.white)),
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          title: Text('تحويل إلى',
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyLarge?.color ??
+                      Colors.white)),
           content: SizedBox(
             width: double.maxFinite,
             child: Consumer(
@@ -708,8 +771,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         Expanded(
           child: TextField(
             controller: _textController,
-            textDirection: TextDirection.ltr,
-            style: const TextStyle(color: Colors.white),
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+                color: Theme.of(context).textTheme.bodyLarge?.color ??
+                    Colors.white),
             maxLines: 4,
             minLines: 1,
             onChanged: (val) {
@@ -724,9 +789,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             },
             decoration: InputDecoration(
               hintText: 'اكتب رسالة...',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+              hintStyle: TextStyle(
+                  color: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.color
+                          ?.withOpacity(0.3) ??
+                      Colors.white.withOpacity(0.3)),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.06),
+              fillColor: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.color
+                      ?.withOpacity(0.06) ??
+                  Colors.white.withOpacity(0.06),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(24),
                 borderSide: BorderSide.none,
@@ -1030,7 +1106,9 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+      color: isSelected
+          ? Theme.of(context).primaryColor.withOpacity(0.1)
+          : Colors.transparent,
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -1041,11 +1119,14 @@ class _MessageBubble extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             gradient: isMe
-                ? const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF5B52E5)],
+                ? LinearGradient(
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Theme.of(context).colorScheme.primary.withOpacity(0.8)
+                    ],
                   )
                 : null,
-            color: isMe ? null : const Color(0xFF1E1E38),
+            color: isMe ? null : Theme.of(context).cardColor,
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(18),
               topRight: const Radius.circular(18),
@@ -1096,8 +1177,12 @@ class _MessageBubble extends StatelessWidget {
             children: [
               Text(
                 message.decryptedText ?? '🔒',
-                style: const TextStyle(color: Colors.white, fontSize: 15),
-                textDirection: TextDirection.ltr,
+                style: TextStyle(
+                    color: isMe
+                        ? Colors.white
+                        : Theme.of(context).textTheme.bodyLarge?.color,
+                    fontSize: 15),
+                textDirection: TextDirection.rtl,
               ),
               const SizedBox(height: 4),
               _TimeAndStatus(message: message, isMe: isMe),
@@ -1183,8 +1268,14 @@ class _MessageBubble extends StatelessWidget {
                       children: [
                         Text(
                           message.fileName ?? 'ملف',
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 13),
+                          style: TextStyle(
+                              color: isMe
+                                  ? Colors.white
+                                  : Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.color,
+                              fontSize: 13),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1319,9 +1410,11 @@ class _AudioBubble extends ConsumerWidget {
         ? (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
 
-    final iconColor = isMe ? Colors.white : const Color(0xFF6C63FF);
+    final iconColor =
+        isMe ? Colors.white : Theme.of(context).colorScheme.primary;
     final trackColor = isMe ? Colors.white.withOpacity(0.3) : Colors.white24;
-    final activeColor = isMe ? Colors.white : const Color(0xFF6C63FF);
+    final activeColor =
+        isMe ? Colors.white : Theme.of(context).colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1338,7 +1431,7 @@ class _AudioBubble extends ConsumerWidget {
                 child: Material(
                   color: isMe
                       ? Colors.white.withOpacity(0.15)
-                      : const Color(0xFF6C63FF).withOpacity(0.15),
+                      : Theme.of(context).colorScheme.primary.withOpacity(0.15),
                   shape: const CircleBorder(),
                   child: !hasFile && onDownload != null
                       ? IconButton(
@@ -1366,7 +1459,6 @@ class _AudioBubble extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 10),
-
               // Progress bar + time label
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1377,7 +1469,7 @@ class _AudioBubble extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: progress.toDouble(),
-                        backgroundColor: trackColor,
+                        backgroundColor: Colors.grey,
                         valueColor: AlwaysStoppedAnimation(activeColor),
                         minHeight: 4,
                       ),
@@ -1661,7 +1753,7 @@ class _EmptyConversation extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'محادثة مع $peerName',
-            style: const TextStyle(color: Colors.white70, fontSize: 16),
+            style: const TextStyle(color: Colors.white, fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(

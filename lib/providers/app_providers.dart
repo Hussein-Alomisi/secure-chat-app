@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../core/encryption/encryption_service.dart';
 import '../core/network/api_service.dart';
@@ -51,7 +52,38 @@ final audioPlaybackManagerProvider =
 
 // ─── Theme Mode Provider ──────────────────────────────────────────────────────
 
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
+class ThemeNotifier extends StateNotifier<ThemeMode> {
+  ThemeNotifier() : super(ThemeMode.dark) {
+    _loadTheme();
+  }
+
+  static const _themeKey = 'app_theme_mode';
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeString = prefs.getString(_themeKey);
+    if (themeString != null) {
+      if (themeString == 'light') {
+        state = ThemeMode.light;
+      } else if (themeString == 'dark') {
+        state = ThemeMode.dark;
+      }
+    }
+  }
+
+  Future<void> toggleTheme() async {
+    final newTheme = state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    state = newTheme;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _themeKey, newTheme == ThemeMode.light ? 'light' : 'dark');
+  }
+}
+
+final themeModeProvider =
+    StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) {
+  return ThemeNotifier();
+});
 
 // ─── Auth State ───────────────────────────────────────────────────────────────
 
@@ -282,13 +314,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
           _socket.notifyMessageProcessed(msg.senderId);
 
           if (currentActiveChatId != msg.senderId) {
+            await _db.incrementUnread(convId);
             final senderDetails = await _db.getUserById(msg.senderId);
             final senderName = senderDetails?.name ?? msg.senderId;
             NotificationService().showForegroundNotification(
               title: senderName,
               body: preview,
               chatId: msg.senderId,
+              senderId: msg.senderId,
+              senderName: senderName,
             );
+          } else {
+            // Already open -> send read ack
+            _socket.sendReadAck(msg.id, msg.senderId);
+            await _db.updateMessageStatus(msg.id, 'read');
           }
           AppLogger.i(
             '╔══ GLOBAL: msg ${msg.id} COMPLETE ✓ ══╗\n'
@@ -720,6 +759,14 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     // Load existing messages from local DB into UI state
     await _refreshFromDb();
 
+    // Mark unread messages as read and send acks
+    final unreadMsgs = state
+        .where((m) => m.senderId == peerId && m.status != MessageStatus.read);
+    for (final m in unreadMsgs) {
+      _socket.sendReadAck(m.id, peerId);
+      await _db.updateMessageStatus(m.id, 'read');
+    }
+
     await _db.clearUnread(_conversationId!);
     AppLogger.i('Chat initialized ✓', tag: 'CHAT');
   }
@@ -789,7 +836,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       await _db.updateMessageStatus(msgId, newStatus.name);
       await _db.updateConversationLastMessage(
         _conversationId!,
-        '🔒 رسالة جديدة',
+        ' رسالة جديدة',
         DateTime.now().toIso8601String(),
       );
       state = state

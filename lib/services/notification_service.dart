@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import '../core/models/chat_message.dart';
+import '../features/chat/chat_screen.dart';
 import '../core/network/api_service.dart';
 
 // Background message handler must be a top-level function
@@ -107,6 +109,8 @@ class NotificationService {
     required String title,
     required String body,
     required String chatId,
+    required String senderId,
+    required String senderName,
   }) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
@@ -125,7 +129,11 @@ class NotificationService {
       title: title,
       body: body,
       notificationDetails: platformChannelSpecifics,
-      payload: jsonEncode({'chatId': chatId}),
+      payload: jsonEncode({
+        'chatId': chatId,
+        'senderId': senderId,
+        'senderName': senderName,
+      }),
     );
   }
 
@@ -138,13 +146,28 @@ class NotificationService {
   }
 
   // Navigation Logic
-  void _handleMessageRoute(Map<String, dynamic> data) {
+  void _handleMessageRoute(Map<String, dynamic> data) async {
     final chatId = data['chatId'];
+    final senderId = data['senderId'] ?? chatId;
+    final senderName = data['senderName'] ?? 'Unknown';
+
     if (chatId != null && navigatorKey.currentState != null) {
-      // Navigate to your Chat Screen
-      // You may need to adapt this routing based on your app's navigation structure
-      // navigatorKey.currentState!.pushNamed('/chat', arguments: {'chatId': chatId});
       debugPrint('Navigate to chat $chatId');
+
+      // Dismiss the notification
+      await _localNotifications.cancelAll();
+
+      navigatorKey.currentState!.push(
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            peer: AppUserModel(
+              id: senderId as String,
+              name: senderName as String,
+              avatarColor: '#6C63FF',
+            ),
+          ),
+        ),
+      );
     }
   }
 

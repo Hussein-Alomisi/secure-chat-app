@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../providers/app_providers.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/database/local_database.dart';
 import '../chat/chat_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -25,17 +26,18 @@ class ChatListScreen extends ConsumerWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D1A),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF13132B),
+          backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
           elevation: 0,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'محادثة آمنة',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).appBarTheme.titleTextStyle?.color ??
+                      Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -63,7 +65,7 @@ class ChatListScreen extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CircleAvatar(
-                          radius: 10,
+                          radius: 12,
                           backgroundColor: myAvatarColor.withOpacity(0.2),
                           backgroundImage: auth.fullAvatarUrl != null
                               ? NetworkImage(auth.fullAvatarUrl!)
@@ -84,8 +86,12 @@ class ChatListScreen extends ConsumerWidget {
                         Text(
                           auth.userName ?? '',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
+                            color: Theme.of(context)
+                                    .appBarTheme
+                                    .titleTextStyle
+                                    ?.color ??
+                                Colors.white,
+                            fontSize: 16,
                           ),
                         ),
                       ],
@@ -107,53 +113,67 @@ class ChatListScreen extends ConsumerWidget {
             //   onPressed: () => _showSecurityInfo(context),
             //   tooltip: 'معلومات الأمان',
             // ),
-            // Consumer(
-            //   builder: (context, ref, _) {
-            //     final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
-            //     return IconButton(
-            //       icon: AnimatedSwitcher(
-            //         duration: const Duration(milliseconds: 300),
-            //         transitionBuilder: (child, anim) => RotationTransition(
-            //           turns: anim,
-            //           child: FadeTransition(opacity: anim, child: child),
-            //         ),
-            //         child: Icon(
-            //           isDark
-            //               ? Icons.light_mode_rounded
-            //               : Icons.dark_mode_rounded,
-            //           key: ValueKey(isDark),
-            //           color: isDark
-            //               ? const Color(0xFFFFD600)
-            //               : const Color(0xFF5C6BC0),
-            //         ),
-            //       ),
-            //       tooltip: isDark ? 'الوضع النهاري' : 'الوضع الليلي',
-            //       onPressed: () {
-            //         ref.read(themeModeProvider.notifier).state =
-            //             isDark ? ThemeMode.light : ThemeMode.dark;
-            //       },
-            //     );
-            //   },
-            // ),
+            Consumer(
+              builder: (context, ref, _) {
+                final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
+                return IconButton(
+                  icon: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, anim) => RotationTransition(
+                      turns: anim,
+                      child: FadeTransition(opacity: anim, child: child),
+                    ),
+                    child: Icon(
+                      isDark
+                          ? Icons.light_mode_rounded
+                          : Icons.dark_mode_rounded,
+                      key: ValueKey(isDark),
+                      color: isDark
+                          ? const Color(0xFFFFD600)
+                          : const Color(0xFF5C6BC0),
+                    ),
+                  ),
+                  tooltip: isDark ? 'الوضع النهاري' : 'الوضع الليلي',
+                  onPressed: () {
+                    ref.read(themeModeProvider.notifier).toggleTheme();
+                  },
+                );
+              },
+            ),
             IconButton(
-              icon: const Icon(Icons.logout_rounded, color: Colors.white54),
+              icon: Icon(Icons.logout_rounded,
+                  color: Theme.of(context).appBarTheme.iconTheme?.color ??
+                      Colors.white54),
               onPressed: () => ref.read(authProvider.notifier).logout(),
             ),
           ],
         ),
         body: usersAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+          loading: () => Center(
+            child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary),
           ),
           error: (err, _) => Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wifi_off_rounded,
-                    color: Colors.white38, size: 48),
+                Icon(Icons.wifi_off_rounded,
+                    color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.38) ??
+                        Colors.white38,
+                    size: 48),
                 const SizedBox(height: 12),
                 Text('تعذر تحميل جهات الاتصال',
-                    style: TextStyle(color: Colors.white.withOpacity(0.5))),
+                    style: TextStyle(
+                        color: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color
+                                ?.withOpacity(0.5) ??
+                            Colors.white.withOpacity(0.5))),
               ],
             ),
           ),
@@ -185,7 +205,7 @@ class ChatListScreen extends ConsumerWidget {
   void _showSecurityInfo(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF13132B),
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -198,7 +218,7 @@ class ChatListScreen extends ConsumerWidget {
               width: 48,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
+                color: Theme.of(context).dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -206,10 +226,11 @@ class ChatListScreen extends ConsumerWidget {
             const Icon(Icons.shield_rounded,
                 color: Color(0xFF6C63FF), size: 48),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'حماية عالية المستوى',
               style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).textTheme.bodyLarge?.color ??
+                      Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold),
             ),
@@ -230,12 +251,21 @@ class ChatListScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(item.$2,
-                              style: const TextStyle(
-                                  color: Colors.white,
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.color ??
+                                      Colors.white,
                                   fontWeight: FontWeight.w600)),
                           Text(item.$3,
                               style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
+                                  color: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.color
+                                          ?.withOpacity(0.5) ??
+                                      Colors.white.withOpacity(0.5),
                                   fontSize: 12)),
                         ],
                       ),
@@ -258,7 +288,7 @@ class ChatListScreen extends ConsumerWidget {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF13132B),
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -272,7 +302,7 @@ class ChatListScreen extends ConsumerWidget {
                 width: 48,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: Theme.of(context).dividerColor,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -285,10 +315,11 @@ class ChatListScreen extends ConsumerWidget {
                 size: 48,
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'تسجيل الدخول بالبصمة',
                 style: TextStyle(
-                    color: Colors.white,
+                    color: Theme.of(context).textTheme.bodyLarge?.color ??
+                        Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold),
               ),
@@ -301,7 +332,13 @@ class ChatListScreen extends ConsumerWidget {
                     : 'جهازك لا يدعم البصمة أو غير معدّة حالياً',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.5), fontSize: 13),
+                    color: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.color
+                            ?.withOpacity(0.5) ??
+                        Colors.white.withOpacity(0.5),
+                    fontSize: 13),
               ),
               const SizedBox(height: 24),
               if (isAvailable)
@@ -355,21 +392,33 @@ class ChatListScreen extends ConsumerWidget {
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF13132B),
-          title: const Text('تأكيد كلمة المرور',
-              style: TextStyle(color: Colors.white)),
+          backgroundColor: Theme.of(context).cardColor,
+          title: Text('تأكيد كلمة المرور',
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyLarge?.color ??
+                      Colors.white)),
           content: TextField(
             textDirection: TextDirection.rtl,
             textAlign: TextAlign.right,
             controller: passwordController,
             obscureText: true,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(
+                color: Theme.of(context).textTheme.bodyLarge?.color ??
+                    Colors.white),
             decoration: InputDecoration(
               hintTextDirection: TextDirection.rtl,
               hintText: 'كلمة المرور الحالية',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+              hintStyle: TextStyle(
+                  color: Theme.of(context)
+                          .textTheme
+                          .bodyLarge
+                          ?.color
+                          ?.withOpacity(0.3) ??
+                      Colors.white.withOpacity(0.3)),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.06),
+              fillColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withOpacity(0.06)
+                  : Colors.black.withOpacity(0.04),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none),
@@ -414,11 +463,17 @@ class ChatListScreen extends ConsumerWidget {
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          backgroundColor: Color(0xFF13132B),
+                      SnackBar(
+                          backgroundColor:
+                              Theme.of(context).appBarTheme.backgroundColor,
                           content: Text(
                             'تم تفعيل البصمة بنجاح',
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.color ??
+                                    Colors.white),
                           )),
                     );
                   }
@@ -439,14 +494,14 @@ class ChatListScreen extends ConsumerWidget {
   }
 }
 
-class _ContactTile extends StatelessWidget {
+class _ContactTile extends ConsumerWidget {
   final AppUserModel user;
   final VoidCallback onTap;
 
   const _ContactTile({required this.user, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Parse avatar color
     Color avatarColor;
     try {
@@ -460,64 +515,228 @@ class _ContactTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Stack(
-        children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: avatarColor.withOpacity(0.2),
-            backgroundImage: user.fullAvatarUrl != null
-                ? NetworkImage(user.fullAvatarUrl!)
-                : null,
-            child: user.fullAvatarUrl == null
-                ? Text(
-                    user.initials,
-                    style: TextStyle(
-                      color: avatarColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+      leading: GestureDetector(
+        onTap: () {
+          showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Hero(
+                    tag: 'profile_pic_${user.id}',
+                    child: CircleAvatar(
+                      radius: 100,
+                      backgroundColor: avatarColor.withOpacity(0.2),
+                      backgroundImage: user.fullAvatarUrl != null
+                          ? NetworkImage(user.fullAvatarUrl!)
+                          : null,
+                      child: user.fullAvatarUrl == null
+                          ? Text(
+                              user.initials,
+                              style: TextStyle(
+                                color: avatarColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 60,
+                              ),
+                            )
+                          : null,
                     ),
-                  )
-                : null,
-          ),
-          if (user.isOnline)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4ADE80),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF0D0D1A), width: 2),
-                ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    user.name,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color ??
+                          Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
+          );
+        },
+        child: Stack(
+          children: [
+            Hero(
+              tag: 'profile_pic_${user.id}',
+              child: CircleAvatar(
+                radius: 26,
+                backgroundColor: avatarColor.withOpacity(0.2),
+                backgroundImage: user.fullAvatarUrl != null
+                    ? NetworkImage(user.fullAvatarUrl!)
+                    : null,
+                child: user.fullAvatarUrl == null
+                    ? Text(
+                        user.initials,
+                        style: TextStyle(
+                          color: avatarColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            if (user.isOnline)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4ADE80),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
       title: Text(
         user.name,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
           fontWeight: FontWeight.w500,
         ),
       ),
-      subtitle: Text(
-        user.isOnline
-            ? 'متصل الآن'
-            : user.lastSeen != null
-                ? 'آخر ظهور ${timeago.format(DateTime.tryParse(user.lastSeen!) ?? DateTime.now(), locale: 'ar')}'
-                : 'غير متصل',
-        style: TextStyle(
-          color: user.isOnline
-              ? const Color(0xFF4ADE80)
-              : Colors.white.withOpacity(0.35),
-          fontSize: 12,
-        ),
+      subtitle: FutureBuilder<String>(
+        future:
+            ref.read(localDatabaseProvider).getOrCreateConversation(user.id),
+        builder: (context, convIdSnapshot) {
+          if (!convIdSnapshot.hasData) {
+            return const SizedBox.shrink();
+          }
+          final convId = convIdSnapshot.data!;
+          return StreamBuilder<List<Message>>(
+            stream: ref.watch(localDatabaseProvider).watchMessages(convId),
+            builder: (context, msgSnapshot) {
+              if (msgSnapshot.hasData && msgSnapshot.data!.isNotEmpty) {
+                final lastMsg = msgSnapshot.data!.last;
+                String preview = lastMsg.decryptedText ?? '';
+                if (lastMsg.type == 'audio') preview = '🎤 رسالة صوتية';
+                if (lastMsg.type == 'image') preview = '🖼️ صورة';
+                if (lastMsg.type == 'video') preview = '📹 فيديو';
+                if (lastMsg.type == 'file') preview = '📎 ملف';
+
+                if (lastMsg.isDeleted) preview = '🚫 رسالة محذوفة';
+
+                return Text(
+                  preview,
+                  style: TextStyle(
+                    color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.6) ??
+                        Colors.white.withOpacity(0.6),
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                );
+              }
+              return Text(
+                'ابدأ المحادثة...',
+                style: TextStyle(
+                  color: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.color
+                          ?.withOpacity(0.4) ??
+                      Colors.white.withOpacity(0.4),
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
+              );
+            },
+          );
+        },
       ),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: Colors.white.withOpacity(0.2),
+      trailing: FutureBuilder<String>(
+        future:
+            ref.read(localDatabaseProvider).getOrCreateConversation(user.id),
+        builder: (context, convIdSnapshot) {
+          if (!convIdSnapshot.hasData) {
+            return const SizedBox.shrink();
+          }
+          final convId = convIdSnapshot.data!;
+
+          final unreadCountStream = convIdSnapshot.data != null
+              ? (ref
+                  .watch(localDatabaseProvider)
+                  .watchConversations()
+                  .map((list) {
+                  try {
+                    return list.firstWhere((c) => c.id == convId);
+                  } catch (_) {
+                    return null;
+                  }
+                }))
+              : Stream.value(null);
+
+          return StreamBuilder<Conversation?>(
+              stream: unreadCountStream,
+              builder: (context, convSnapshot) {
+                final count = convSnapshot.data?.unreadCount ?? 0;
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      user.isOnline
+                          ? 'متصل'
+                          : user.lastSeen != null
+                              ? timeago.format(
+                                  DateTime.tryParse(user.lastSeen!) ??
+                                      DateTime.now(),
+                                  locale: 'ar')
+                              : 'غير متصل',
+                      style: TextStyle(
+                        color: user.isOnline
+                            ? const Color(0xFF4ADE80)
+                            : Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withOpacity(0.5) ??
+                                Colors.white.withOpacity(0.5),
+                        fontSize: 11,
+                        fontWeight:
+                            user.isOnline ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                    if (count > 0)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.rectangle,
+                          borderRadius: BorderRadius.all(Radius.circular(10)),
+                        ),
+                        child: Text(
+                          count > 99 ? '99+' : count.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              });
+        },
       ),
     );
   }
