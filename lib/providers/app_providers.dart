@@ -380,6 +380,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     });
     AppLogger.i('Global deletion listener registered ✓', tag: 'AUTH');
+    
+    // ── Global message status listener ──────────────────────────────────────
+    _socket.onMessageStatusChanged = (messageId, status) async {
+      AppLogger.i(
+        'GLOBAL STATUS: Message $messageId status updated to $status',
+        tag: 'AUTH',
+      );
+      try {
+        await _db.updateMessageStatus(messageId, status);
+        // Get the message to find out the peerId (recipientId)
+        final msg = await _db.getMessageById(messageId);
+        if (msg != null) {
+          // Notify ChatNotifier to refresh the UI by passing the peer's ID.
+          // Since we sent the message, the 'recipientId' is the peer we are chatting with.
+          _socket.notifyMessageProcessed(msg.recipientId);
+        } else {
+           // Fallback if message not found in local DB yet
+          _socket.notifyMessageProcessed(''); 
+        }
+      } catch (e) {
+        AppLogger.e('GLOBAL STATUS: failed to update status', tag: 'AUTH', error: e);
+      }
+    };
+    AppLogger.i('Global message status listener registered ✓', tag: 'AUTH');
   }
 
   Future<void> _saveToDb(ChatMessage msg) async {

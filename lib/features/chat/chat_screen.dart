@@ -612,62 +612,70 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   ) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'حذف الرسائل',
-          style: TextStyle(
-              color:
-                  Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-              fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'اختر نطاق الحذف لـ ${msgs.length} ${msgs.length == 1 ? "رسالة" : "رسائل"}',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        actions: [
-          // ── Cancel ───────────────────────────────────────────────────────
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'حذف الرسائل',
+            style: TextStyle(
+                color: Theme.of(context).textTheme.bodyLarge?.color ??
+                    Colors.white,
+                fontWeight: FontWeight.bold),
           ),
-          // ── Delete for me ─────────────────────────────────────────────────
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref
-                  .read(chatProvider(widget.peer.id).notifier)
-                  .deleteMessages(msgs, deleteFor: 'me');
-              setState(() => _selectedMessageIds.clear());
-            },
-            child: const Text(
-              'الحذف لدي',
-              style: TextStyle(color: Color(0xFF6C63FF)),
+          content: Text(
+            'هل ترغب في حذف ${msgs.length} ${msgs.length == 1 ? "رسالة" : "رسائل"}؟',
+            style: TextStyle(
+                color: Theme.of(context).textTheme.bodyLarge?.color ??
+                    Colors.white),
+          ),
+          actionsPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          actions: [
+            // ── Cancel ───────────────────────────────────────────────────────
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child:
+                  const Text('إلغاء', style: TextStyle(color: Colors.white54)),
             ),
-          ),
-          // ── Delete for everyone (only if all selected are mine) ───────────
-          if (allMine)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-              ),
+            // ── Delete for me ─────────────────────────────────────────────────
+            TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 ref
                     .read(chatProvider(widget.peer.id).notifier)
-                    .deleteMessages(msgs, deleteFor: 'everyone');
+                    .deleteMessages(msgs, deleteFor: 'me');
                 setState(() => _selectedMessageIds.clear());
               },
               child: const Text(
-                'احذف للجميع',
-                style: TextStyle(color: Colors.white),
+                'الحذف لدي',
+                style: TextStyle(color: Color(0xFF6C63FF)),
               ),
             ),
-        ],
+            // ── Delete for everyone (only if all selected are mine) ───────────
+            if (allMine)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  ref
+                      .read(chatProvider(widget.peer.id).notifier)
+                      .deleteMessages(msgs, deleteFor: 'everyone');
+                  setState(() => _selectedMessageIds.clear());
+                },
+                child: const Text(
+                  'احذف للجميع',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -677,81 +685,80 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          title: Text('تحويل إلى',
-              style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyLarge?.color ??
-                      Colors.white)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Consumer(
-              builder: (context, ref, child) {
-                final usersAsync = ref.watch(usersProvider);
-                return usersAsync.when(
-                  data: (users) {
-                    final auth = ref.read(authProvider);
-                    final otherUsers =
-                        users.where((u) => u.id != auth.userId).toList();
-                    if (otherUsers.isEmpty) {
-                      return const Text('لا يوجد مستخدمين قمت بمحادثتهم بعد',
-                          style: TextStyle(color: Colors.white54));
-                    }
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: otherUsers.length,
-                      itemBuilder: (context, i) {
-                        final u = otherUsers[i];
-                        Color peerColor;
-                        try {
-                          peerColor = Color(int.parse(
-                              u.avatarColor.replaceFirst('#', '0xFF')));
-                        } catch (_) {
-                          peerColor = const Color(0xFF6C63FF);
-                        }
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: peerColor.withOpacity(0.2),
-                            child: Text(
-                              u.initials,
-                              style: TextStyle(
-                                  color: peerColor,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          title: Text(u.name,
-                              style: const TextStyle(color: Colors.white)),
-                          onTap: () {
-                            Navigator.pop(ctx); // Close dialog
-                            for (final msg in messagesToForward) {
-                              ref
-                                  .read(chatProvider(u.id).notifier)
-                                  .forwardMessage(msg);
-                            }
-                            setState(() => _selectedMessageIds.clear());
-                            Navigator.of(context)
-                                .popUntil((route) => route.isFirst);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'تم تحويل ${messagesToForward.length} رسائل بنجاح',
-                                    style:
-                                        const TextStyle(color: Colors.white)),
-                                backgroundColor: const Color(0xFF4ADE80),
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            title: Text('تحويل إلى',
+                style: TextStyle(
+                    color: Theme.of(context).textTheme.bodyLarge?.color ??
+                        Colors.white)),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final usersAsync = ref.watch(usersProvider);
+                  return usersAsync.when(
+                    data: (users) {
+                      final auth = ref.read(authProvider);
+                      final otherUsers =
+                          users.where((u) => u.id != auth.userId).toList();
+                      if (otherUsers.isEmpty) {
+                        return const Text('لا يوجد مستخدمين قمت بمحادثتهم بعد',
+                            style: TextStyle(color: Colors.white54));
+                      }
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: otherUsers.length,
+                        itemBuilder: (context, i) {
+                          final u = otherUsers[i];
+                          Color peerColor;
+                          try {
+                            peerColor = Color(int.parse(
+                                u.avatarColor.replaceFirst('#', '0xFF')));
+                          } catch (_) {
+                            peerColor = const Color(0xFF6C63FF);
+                          }
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: peerColor.withOpacity(0.2),
+                              child: Text(
+                                u.initials,
+                                style: TextStyle(
+                                    color: peerColor,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold),
                               ),
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, st) => const Text('خطأ في تحميل المستخدمين',
-                      style: TextStyle(color: Colors.red)),
-                );
-              },
+                            ),
+                            title: Text(u.name,
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                            .textTheme
+                                            .bodyLarge
+                                            ?.color ??
+                                        Colors.white)),
+                            onTap: () {
+                              Navigator.pop(ctx); // Close dialog
+                              for (final msg in messagesToForward) {
+                                ref
+                                    .read(chatProvider(u.id).notifier)
+                                    .forwardMessage(msg);
+                              }
+                              setState(() => _selectedMessageIds.clear());
+                              Navigator.of(context)
+                                  .popUntil((route) => route.isFirst);
+                            },
+                          );
+                        },
+                      );
+                    },
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, st) => const Text('خطأ في تحميل المستخدمين',
+                        style: TextStyle(color: Colors.red)),
+                  );
+                },
+              ),
             ),
           ),
         );
@@ -765,7 +772,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return Row(
       children: [
         IconButton(
-          icon: const Icon(Icons.attach_file_rounded, color: Colors.white54),
+          icon: Icon(Icons.attach_file_rounded,
+              color:
+                  Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black),
           onPressed: _showAttachmentMenu,
         ),
         Expanded(
@@ -1157,7 +1166,9 @@ class _MessageBubble extends StatelessWidget {
             Text(
               'تم حذف هذه الرسالة',
               style: TextStyle(
-                color: isMe ? Colors.white60 : Colors.white38,
+                color: isMe
+                    ? Colors.white54
+                    : Theme.of(context).textTheme.bodyLarge?.color,
                 fontSize: 14,
                 fontStyle: FontStyle.italic,
               ),
@@ -1325,12 +1336,11 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment:
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding:
-                const EdgeInsets.only(left: 14, right: 14, top: 8, bottom: 2),
+          const Padding(
+            padding: EdgeInsets.only(left: 14, right: 14, top: 8, bottom: 2),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.reply_rounded, size: 14, color: Colors.white60),
                 SizedBox(width: 4),
                 Text('محولة',
@@ -1469,7 +1479,10 @@ class _AudioBubble extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: progress.toDouble(),
-                        backgroundColor: Colors.grey,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.3),
                         valueColor: AlwaysStoppedAnimation(activeColor),
                         minHeight: 4,
                       ),
@@ -1481,7 +1494,7 @@ class _AudioBubble extends ConsumerWidget {
                         ? '${_fmt(position)} / ${_fmt(total)}'
                         : '🎤 رسالة صوتية',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
                       fontSize: 11,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
@@ -1720,7 +1733,8 @@ class _AttachOption extends StatelessWidget {
           const SizedBox(height: 8),
           Text(label,
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.7), fontSize: 12)),
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
+                  fontSize: 12)),
         ],
       ),
     );
@@ -1753,13 +1767,16 @@ class _EmptyConversation extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'محادثة مع $peerName',
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            style: TextStyle(
+                color: Theme.of(context).textTheme.bodyMedium?.color,
+                fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(
-            'الرسائل مشفرة من طرف إلى طرف 🔒',
-            style:
-                TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12),
+            'الرسائل مشفرة بين الطرفين 🔒',
+            style: TextStyle(
+                color: Theme.of(context).textTheme.bodyMedium?.color,
+                fontSize: 12),
           ),
         ],
       ),
