@@ -695,10 +695,7 @@ class _ContactTile extends ConsumerWidget {
                       user.isOnline
                           ? 'متصل'
                           : user.lastSeen != null
-                              ? timeago.format(
-                                  DateTime.tryParse(user.lastSeen!) ??
-                                      DateTime.now(),
-                                  locale: 'ar')
+                              ? 'آخر ظهور ${timeago.format(DateTime.tryParse(user.lastSeen!) ?? DateTime.now(), locale: 'ar')}'
                               : 'غير متصل',
                       style: TextStyle(
                         color: user.isOnline

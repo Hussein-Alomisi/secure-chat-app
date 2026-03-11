@@ -642,20 +642,49 @@ class UsersNotifier extends StateNotifier<AsyncValue<List<AppUserModel>>> {
 
   Future<void> _init() async {
     try {
-      final rawUsers = await _api.getUsers();
-      final users = rawUsers.map((u) => AppUserModel.fromJson(u)).toList();
-      state = AsyncValue.data(users);
+      // 1. Load from local database first (instant UI, offline support)
+      final localUsersDb = await _db.getAllUsers();
+      if (localUsersDb.isNotEmpty) {
+        final localUsers = localUsersDb.map((u) => AppUserModel(
+          id: u.id,
+          name: u.name,
+          avatarColor: u.avatarColor,
+          avatarUrl: u.avatarUrl,
+          publicKey: u.publicKey,
+          isOnline: u.isOnline,
+          lastSeen: u.lastSeen,
+        )).toList();
+        state = AsyncValue.data(localUsers);
+        AppLogger.i('Loaded ${localUsers.length} users from local DB', tag: 'USERS');
+      }
 
-      for (final user in users) {
-        await _db.upsertUser(
-          AppUsersCompanion(
-            id: Value(user.id),
-            name: Value(user.name),
-            avatarColor: Value(user.avatarColor),
-            avatarUrl: Value(user.avatarUrl),
-            publicKey: Value(user.publicKey),
-          ),
-        );
+      // 2. Fetch fresh data from API in background
+      try {
+        final rawUsers = await _api.getUsers();
+        final users = rawUsers.map((u) => AppUserModel.fromJson(u)).toList();
+        
+        // Update state with fresh data
+        state = AsyncValue.data(users);
+
+        // Update local DB
+        for (final user in users) {
+          await _db.upsertUser(
+            AppUsersCompanion(
+              id: Value(user.id),
+              name: Value(user.name),
+              avatarColor: Value(user.avatarColor),
+              avatarUrl: Value(user.avatarUrl),
+              publicKey: Value(user.publicKey),
+            ),
+          );
+        }
+        AppLogger.i('Synced ${users.length} users from API', tag: 'USERS');
+      } catch (e) {
+        AppLogger.w('API fetch failed, using local data. Error: $e', tag: 'USERS');
+        // Only emit error if we don't have local data
+        if (state is! AsyncData) {
+          state = AsyncValue.error(e, StackTrace.current);
+        }
       }
 
       _socket.onPresenceChanged = (userId, isOnline, lastSeen) {

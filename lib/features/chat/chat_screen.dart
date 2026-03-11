@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:timeago/timeago.dart' as timeago;
 import 'package:open_filex/open_filex.dart';
 import 'package:video_player/video_player.dart';
 import 'package:photo_view/photo_view.dart';
@@ -517,7 +518,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     : currentPeer.isOnline
                         ? 'متصل'
                         : (currentPeer.lastSeen != null
-                            ? 'آخر ظهور ${currentPeer.lastSeen}'
+                            ? 'آخر ظهور ${timeago.format(DateTime.tryParse(currentPeer.lastSeen!) ?? DateTime.now(), locale: 'ar')}'
                             : 'غير متصل'),
                 style: TextStyle(
                   color: _peerIsTyping || currentPeer.isOnline
