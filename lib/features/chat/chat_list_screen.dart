@@ -6,6 +6,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/database/local_database.dart';
 import '../chat/chat_screen.dart';
 import '../profile/profile_screen.dart';
+import '../../core/widgets/custom_avatar.dart';
 
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
@@ -64,23 +65,13 @@ class ChatListScreen extends ConsumerWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
+                        CustomAvatar(
                           radius: 12,
                           backgroundColor: myAvatarColor.withOpacity(0.2),
-                          backgroundImage: auth.fullAvatarUrl != null
-                              ? NetworkImage(auth.fullAvatarUrl!)
-                              : null,
-                          child: auth.fullAvatarUrl == null
-                              ? Text(
-                                  auth.userName?.isNotEmpty == true
-                                      ? auth.userName![0].toUpperCase()
-                                      : '?',
-                                  style: TextStyle(
-                                      color: myAvatarColor,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold),
-                                )
-                              : null,
+                          foregroundColor: myAvatarColor,
+                          imageUrl: auth.fullAvatarUrl,
+                          fallbackText: auth.userName ?? '?',
+                          fontSizeFallback: 10,
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -206,22 +197,13 @@ class _ContactTile extends ConsumerWidget {
                 children: [
                   Hero(
                     tag: 'profile_pic_${user.id}',
-                    child: CircleAvatar(
+                    child: CustomAvatar(
                       radius: 100,
                       backgroundColor: avatarColor.withOpacity(0.2),
-                      backgroundImage: user.fullAvatarUrl != null
-                          ? NetworkImage(user.fullAvatarUrl!)
-                          : null,
-                      child: user.fullAvatarUrl == null
-                          ? Text(
-                              user.initials,
-                              style: TextStyle(
-                                color: avatarColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 60,
-                              ),
-                            )
-                          : null,
+                      foregroundColor: avatarColor,
+                      imageUrl: user.fullAvatarUrl,
+                      fallbackText: user.initials,
+                      fontSizeFallback: 60,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -243,22 +225,13 @@ class _ContactTile extends ConsumerWidget {
           children: [
             Hero(
               tag: 'profile_pic_${user.id}',
-              child: CircleAvatar(
+              child: CustomAvatar(
                 radius: 26,
                 backgroundColor: avatarColor.withOpacity(0.2),
-                backgroundImage: user.fullAvatarUrl != null
-                    ? NetworkImage(user.fullAvatarUrl!)
-                    : null,
-                child: user.fullAvatarUrl == null
-                    ? Text(
-                        user.initials,
-                        style: TextStyle(
-                          color: avatarColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      )
-                    : null,
+                foregroundColor: avatarColor,
+                imageUrl: user.fullAvatarUrl,
+                fallbackText: user.initials,
+                fontSizeFallback: 16,
               ),
             ),
             if (user.isOnline)

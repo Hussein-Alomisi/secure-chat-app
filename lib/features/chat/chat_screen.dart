@@ -12,6 +12,7 @@ import 'package:video_player/video_player.dart';
 import 'package:photo_view/photo_view.dart';
 import '../../providers/app_providers.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/widgets/custom_avatar.dart';
 import '../../core/audio/voice_recorder_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -86,7 +87,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+          curve: Curves.easeInOutQuart,
         );
       }
     });
@@ -447,22 +448,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     children: [
                       Hero(
                         tag: 'profile_pic_${widget.peer.id}',
-                        child: CircleAvatar(
+                        child: CustomAvatar(
                           radius: 100,
                           backgroundColor: peerColor.withOpacity(0.2),
-                          backgroundImage: widget.peer.fullAvatarUrl != null
-                              ? NetworkImage(widget.peer.fullAvatarUrl!)
-                              : null,
-                          child: widget.peer.fullAvatarUrl == null
-                              ? Text(
-                                  widget.peer.initials,
-                                  style: TextStyle(
-                                    color: peerColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 60,
-                                  ),
-                                )
-                              : null,
+                          foregroundColor: peerColor,
+                          imageUrl: widget.peer.fullAvatarUrl,
+                          fallbackText: widget.peer.initials,
+                          fontSizeFallback: 60,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -482,22 +474,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             },
             child: Hero(
               tag: 'profile_pic_${widget.peer.id}',
-              child: CircleAvatar(
+              child: CustomAvatar(
                 radius: 18,
                 backgroundColor: peerColor.withOpacity(0.2),
-                backgroundImage: widget.peer.fullAvatarUrl != null
-                    ? NetworkImage(widget.peer.fullAvatarUrl!)
-                    : null,
-                child: widget.peer.fullAvatarUrl == null
-                    ? Text(
-                        widget.peer.initials,
-                        style: TextStyle(
-                          color: peerColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      )
-                    : null,
+                foregroundColor: peerColor,
+                imageUrl: widget.peer.fullAvatarUrl,
+                fallbackText: widget.peer.initials,
+                fontSizeFallback: 13,
               ),
             ),
           ),
@@ -721,15 +704,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                             peerColor = const Color(0xFF6C63FF);
                           }
                           return ListTile(
-                            leading: CircleAvatar(
+                            leading: CustomAvatar(
+                              radius: 20,
                               backgroundColor: peerColor.withOpacity(0.2),
-                              child: Text(
-                                u.initials,
-                                style: TextStyle(
-                                    color: peerColor,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold),
-                              ),
+                              foregroundColor: peerColor,
+                              imageUrl: u.fullAvatarUrl,
+                              fallbackText: u.initials,
+                              fontSizeFallback: 13,
                             ),
                             title: Text(u.name,
                                 style: TextStyle(
@@ -1267,11 +1248,20 @@ class _MessageBubble extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.color
+                          ?.withValues(alpha: .15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.insert_drive_file_rounded,
-                        color: Colors.white70, size: 22),
+                    child: Icon(Icons.insert_drive_file_rounded,
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.color
+                            ?.withValues(alpha: .8),
+                        size: 22),
                   ),
                   const SizedBox(width: 10),
                   Flexible(
@@ -1304,14 +1294,20 @@ class _MessageBubble extends StatelessWidget {
                   const SizedBox(width: 8),
                   if (message.localFilePath != null)
                     IconButton(
-                      icon: const Icon(Icons.open_in_new_rounded,
-                          color: Colors.white70, size: 18),
+                      icon: Icon(Icons.open_in_new_rounded,
+                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          size: 18),
                       onPressed: () => OpenFilex.open(message.localFilePath!),
                     )
                   else if (onDownload != null)
                     IconButton(
-                      icon: const Icon(Icons.download_rounded,
-                          color: Colors.white70, size: 18),
+                      icon: Icon(Icons.download_rounded,
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.color
+                              ?.withValues(alpha: .8),
+                          size: 18),
                       onPressed: onDownload,
                     ),
                 ],
@@ -1528,7 +1524,11 @@ class _TimeAndStatus extends StatelessWidget {
         Text(
           DateFormat('HH:mm').format(message.timestamp),
           style: TextStyle(
-            color: Colors.white.withOpacity(0.4),
+            color: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.color
+                ?.withValues(alpha: .5),
             fontSize: 10,
           ),
         ),
@@ -1565,7 +1565,7 @@ class _MediaPlaceholder extends StatelessWidget {
       width: 200,
       height: 120,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
+        color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1574,8 +1574,11 @@ class _MediaPlaceholder extends StatelessWidget {
           Icon(icon, color: Colors.white38, size: 36),
           const SizedBox(height: 8),
           Text(label,
-              style:
-                  TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+              softWrap: true,
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyMedium?.color ??
+                      Colors.white,
+                  fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis),
           if (onDownload != null) ...[
@@ -1585,7 +1588,7 @@ class _MediaPlaceholder extends StatelessWidget {
               icon: const Icon(Icons.download_rounded, size: 14),
               label: const Text('تنزيل', style: TextStyle(fontSize: 12)),
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF6C63FF),
+                foregroundColor: Colors.white,
                 padding: EdgeInsets.zero,
               ),
             ),

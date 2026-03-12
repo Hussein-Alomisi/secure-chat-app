@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../providers/app_providers.dart';
+import '../../core/widgets/custom_avatar.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -280,12 +281,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       myAvatarColor = const Color(0xFF6C63FF);
     }
 
-    ImageProvider? imageProvider;
-    if (_pickedImage != null) {
-      imageProvider = FileImage(_pickedImage!);
-    } else if (auth.fullAvatarUrl != null) {
-      imageProvider = NetworkImage(auth.fullAvatarUrl!);
-    }
+    // CustomAvatar handles both local and network images
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -317,21 +313,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 onTap: _pickImage,
                 child: Stack(
                   children: [
-                    CircleAvatar(
+                    CustomAvatar(
                       radius: 60,
                       backgroundColor: myAvatarColor.withOpacity(0.2),
-                      backgroundImage: imageProvider,
-                      child: imageProvider == null
-                          ? Text(
-                              auth.userName?.isNotEmpty == true
-                                  ? auth.userName![0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(
-                                  color: myAvatarColor,
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.bold),
-                            )
-                          : null,
+                      foregroundColor: myAvatarColor,
+                      imageUrl: auth.fullAvatarUrl,
+                      localImage: _pickedImage,
+                      fallbackText: auth.userName ?? '?',
+                      fontSizeFallback: 40,
                     ),
                     Positioned(
                       bottom: 0,

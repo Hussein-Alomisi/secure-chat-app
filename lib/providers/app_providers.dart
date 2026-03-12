@@ -779,49 +779,53 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   Future<void> initialize() async {
     AppLogger.i('Initializing chat with peer: $peerId', tag: 'CHAT');
 
-    AppLogger.d('Fetching peer public key from server...', tag: 'CHAT');
-    _peerPublicKey = await _api.getUserPublicKey(peerId);
-    if (_peerPublicKey != null) {
-      AppLogger.d(
-        'Peer public key received (${_peerPublicKey!.substring(0, 12)}...)',
-        tag: 'CHAT',
-      );
-    } else {
-      AppLogger.w(
-        'Peer public key not found — E2EE unavailable until peer logs in',
-        tag: 'CHAT',
-      );
-    }
-
+    // 1. Get Conversation ID immediately from local DB
     _conversationId = await _db.getOrCreateConversation(peerId);
     AppLogger.d('Conversation ready: $_conversationId', tag: 'CHAT');
 
-    // ⚠️ Subscribe BEFORE loading from DB to avoid missing events that fire
-    // while we're awaiting the initial DB read (race-condition prevention).
+    // 2. Subscribe to socket events BEFORE loading from DB to avoid race conditions
     _msgSub?.cancel();
     _msgSub = _socket.processedMessageStream
-        // Accept normal message events (senderId == peerId) AND the
-        // empty-string marker that AuthNotifier's global deletion listener
-        // emits after persisting a remote delete — so the UI refreshes.
         .where((senderId) => senderId == peerId || senderId.isEmpty)
         .listen((_) => _refreshFromDb());
     AppLogger.d('processedMessageStream subscribed ✓', tag: 'CHAT');
-    // Deletion DB persistence is handled by AuthNotifier._globalDeleteSub
-    // which also notifies this stream via notifyMessageProcessed('').
 
-    // Load existing messages from local DB into UI state
+    // 3. Eagerly load existing messages from local DB into UI state instantly
     await _refreshFromDb();
 
-    // Mark unread messages as read and send acks
-    final unreadMsgs = state
-        .where((m) => m.senderId == peerId && m.status != MessageStatus.read);
-    for (final m in unreadMsgs) {
-      _socket.sendReadAck(m.id, peerId);
-      await _db.updateMessageStatus(m.id, 'read');
-    }
+    // 4. Perform background network operations without blocking the UI
+    _performBackgroundSync();
+  }
 
-    await _db.clearUnread(_conversationId!);
-    AppLogger.i('Chat initialized ✓', tag: 'CHAT');
+  Future<void> _performBackgroundSync() async {
+    try {
+      AppLogger.d('Fetching peer public key from server...', tag: 'CHAT');
+      _peerPublicKey = await _api.getUserPublicKey(peerId);
+      if (_peerPublicKey != null) {
+        AppLogger.d(
+          'Peer public key received (${_peerPublicKey!.substring(0, 12)}...)',
+          tag: 'CHAT',
+        );
+      } else {
+        AppLogger.w(
+          'Peer public key not found — E2EE unavailable until peer logs in',
+          tag: 'CHAT',
+        );
+      }
+
+      // Mark unread messages as read and send acks
+      final unreadMsgs = state.where(
+          (m) => m.senderId == peerId && m.status != MessageStatus.read);
+      for (final m in unreadMsgs) {
+        _socket.sendReadAck(m.id, peerId);
+        await _db.updateMessageStatus(m.id, 'read');
+      }
+
+      await _db.clearUnread(_conversationId!);
+      AppLogger.i('Chat initialized and synced ✓', tag: 'CHAT');
+    } catch (e) {
+      AppLogger.w('Background sync failed (likely offline): $e', tag: 'CHAT');
+    }
   }
 
   Future<void> _refreshFromDb() async {
