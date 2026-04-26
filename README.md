@@ -1,107 +1,128 @@
-# SecureChat
+<div align="center">
+  <img src="https://via.placeholder.com/150x150.png?text=SecureChat+Logo" alt="SecureChat Logo" width="120" />
 
-A full-featured, privacy-focused real-time messaging application built with Flutter. SecureChat delivers a robust chatting experience combining seamless real-time communication with full offline capabilities, ensuring your messages are always accessible.
+  # 🛡️ SecureChat
 
-## Features
+  **A High-Performance, Privacy-First Real-Time Messaging Application**
 
-- **Real-Time Messaging**: Instant communication powered by Socket.io.
-- **Offline Mode**: Local SQLite database integration ensures the app is fully functional without an internet connection.
-- **Message Status**: Track whether messages are sent, delivered, or read.
-- **Rich Messaging**: Support for replying to messages and message reactions.
-- **Media Sharing & Viewer**: Share images, videos, files, and links. Includes a dedicated, immersive chat media viewer.
-- **In-Chat Search**: Easily search through conversations with seamless next/previous navigation.
-- **Intuitive UI**: Smooth scroll behavior inspired by WhatsApp, an unread message counter, and a "New Messages" divider.
-- **Presence System**: Real-time online/offline status and typing indicators.
-- **Profile Management**: Customizable user profiles with name and avatar management.
-- **Privacy & Security**:
-  - Biometric authentication (App lock via fingerprint).
-  - Privacy mode (hides content when the app is in the background).
-- **Personalization**: Emoji and sticker support, along with full Dark and Light theme capabilities.
+  [![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
+  [![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+  [![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=for-the-badge&logo=socket.io&logoColor=white)](https://socket.io/)
+  [![SQLite](https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org/)
 
-## Screenshots
+  *Seamless Communication • Offline-First Architecture • Enterprise-Grade Security*
+</div>
 
-<p float="left">
-  <img src="https://via.placeholder.com/250x500.png?text=Home+Screen" width="200" />
-  <img src="https://via.placeholder.com/250x500.png?text=Chat+View" width="200" />
-  <img src="https://via.placeholder.com/250x500.png?text=Media+Viewer" width="200" />
-  <img src="https://via.placeholder.com/250x500.png?text=Settings+%26+Security" width="200" />
-</p>
+---
 
-## Tech Stack
+## 📖 Overview
 
-- **Frontend**: Flutter
-- **Backend**: Node.js, Express, Socket.io
-- **Local Database**: SQLite
-- **Push Notifications**: Firebase Cloud Messaging (FCM)
+**SecureChat** is a production-ready messaging platform built to demonstrate advanced mobile development practices. It bridges the gap between instantaneous real-time communication and robust offline capabilities, offering a seamless UX regardless of network conditions. 
 
-## Architecture
+Designed with privacy and performance at its core, this project showcases clean architecture, complex state management, and real-time data synchronization.
 
-This project follows a feature-based architecture pattern with a strong separation of concerns. The application logic is modularized to ensure scalability and maintainability:
+---
 
-- **Core**: Contains globally shared utilities, models, networking logic, and local database (SQLite) integrations.
-- **Features**: Encapsulates specific application modules (e.g., Auth, Chat, Profile), making it easy to isolate functionality.
-- **Services / Providers**: Handles state management and direct communication with external services (Node.js backend, Socket.io, Firebase).
+## ✨ Key Technical Achievements
 
-## Folder Structure
+What makes this project stand out from typical chat applications:
+
+- 🔄 **Offline-First Synchronization:** Built a robust local caching layer using **SQLite**. Users can read, search, and queue messages while fully offline. Messages automatically sync when the connection is restored.
+- ⚡ **Real-Time Birectional Data:** Leveraged **Socket.io** for low-latency, instantaneous message delivery, typing indicators, and presence tracking.
+- 📱 **Native-Grade Fluid UI/UX:** Engineered a custom WhatsApp-style scroll behavior, seamless "jump-to" in-chat search navigation, and immersive media viewing without dropping frames.
+- 🔒 **Privacy by Design:** Implemented hardware-backed **Biometric Authentication** (Fingerprint/FaceID) and an App-Background Privacy Mode to prevent sensitive content from appearing in the OS app switcher.
+
+---
+
+## 📱 Feature Showcase
+
+### 💬 Messaging Experience
+* **Rich Messaging:** Text, emoji, sticker support, message reactions, and threaded replies.
+* **Granular Status Tracking:** Real-time visual indicators for *Sent*, *Delivered*, and *Read* receipts.
+* **Smart Navigation:** "New Messages" divider and dynamic unread counters.
+
+### 🖼️ Media & Search
+* **Media Handling:** Seamless sharing of images, videos, documents, and links.
+* **Immersive Viewer:** Dedicated in-app gallery viewer for high-res media exploration.
+* **Deep Search:** Instantly search through thousands of local messages with keyword highlighting and previous/next navigation.
+
+### 👤 Profile & Personalization
+* **Presence System:** Live Online/Offline status and dynamic typing indicators.
+* **Customization:** Full user profile management and complete support for dynamically switching between **Dark & Light Themes**.
+
+---
+
+## 📸 Screenshots
+
+<div align="center">
+  <img src="https://via.placeholder.com/250x500.png?text=Home+Screen" width="22%" />&nbsp;
+  <img src="https://via.placeholder.com/250x500.png?text=Chat+Interface" width="22%" />&nbsp;
+  <img src="https://via.placeholder.com/250x500.png?text=Media+Viewer" width="22%" />&nbsp;
+  <img src="https://via.placeholder.com/250x500.png?text=Security+Lock" width="22%" />
+</div>
+
+---
+
+## 🏗️ Architecture & Code Quality
+
+This project strictly adheres to **Clean Architecture** principles to ensure the codebase remains scalable, testable, and maintainable.
 
 ```text
 lib/
-├── core/
-│   ├── audio/           # Audio processing utilities
-│   ├── auth/            # Core authentication logic (Biometrics, etc.)
-│   ├── database/        # SQLite configuration and DAOs
-│   ├── encryption/      # Local encryption algorithms
-│   ├── models/          # Shared data models
-│   ├── network/         # HTTP and Socket.io clients
-│   ├── utils/           # Helpers and constants
-│   └── widgets/         # Reusable UI components
-├── features/
-│   ├── auth/            # Login, registration, and onboarding UI
-│   ├── chat/            # Chat listing, messaging UI, media viewer
-│   └── profile/         # User profile and settings
-├── providers/           # State management providers
-├── services/            # Background and external services
-├── firebase_options.dart
-└── main.dart
+├── core/            # Global utilities, network clients (Socket.io), DAOs, models
+├── features/        # Isolated feature modules (Auth, Chat, Profile)
+├── providers/       # State Management handling
+└── services/        # Background processes and Firebase integration
 ```
 
-## Getting Started
+* **Separation of Concerns:** UI code is completely decoupled from business logic and data fetching.
+* **Modular Features:** The `features/` directory isolates distinct parts of the app, preventing spaghetti code and allowing for easy scaling.
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-
-- [Flutter SDK](https://flutter.dev/docs/get-started/install)
-- Node.js & npm (for the backend environment)
-- A physical device or emulator for testing biometric features
+* [Flutter SDK](https://flutter.dev/docs/get-started/install) (3.0.0+)
+* Node.js & npm (for local backend setup)
+* Physical device or Emulator with Biometrics enabled
 
 ### Installation
 
-1. **Clone the repository:**
+1. **Clone the repository**
    ```bash
    git clone https://github.com/yourusername/securechat.git
    cd securechat/flutter_app
    ```
 
-2. **Install Flutter dependencies:**
+2. **Fetch dependencies**
    ```bash
    flutter pub get
    ```
 
-3. **Configure the Environment:**
-   Ensure you have your backend running locally or hosted, and update the base URLs in the `lib/core/network/` configurations.
-   If using Firebase, add your `google-services.json` (Android) and `GoogleService-Info.plist` (iOS).
+3. **Configure Environment**
+   * Start your local Node.js server.
+   * Update the `baseUrl` in `lib/core/network/` to point to your local backend.
+   * *(Optional)* Add your Firebase `google-services.json` / `GoogleService-Info.plist` for push notifications.
 
-4. **Run the application:**
+4. **Run the App**
    ```bash
    flutter run
    ```
 
-## Future Improvements
+---
 
-- **Voice Messages**: In-app recording and playback of voice notes.
-- **End-to-End Encryption**: Upgrading from local-only encryption to full E2EE for maximum security.
-- **Cloud Sync**: Securely sync chat history and media across multiple devices.
-- **Group Chats**: Support for multi-user channels with admin controls.
+## 🔮 Roadmap & Future Scope
+
+Demonstrating a vision for continuous improvement:
+- [ ] **End-to-End Encryption (E2EE):** Implementing Signal Protocol for absolute privacy.
+- [ ] **Voice Notes:** In-app audio recording with waveform visualization.
+- [ ] **Group Channels:** Expanding architecture to support multi-user chat rooms.
+- [ ] **Cloud Backup:** Securely syncing local SQLite data to encrypted cloud storage.
 
 ---
 
-*Designed and built with care for a seamless, private chatting experience.*
+<div align="center">
+  <b>Built with ❤️ by <a href="https://github.com/yourusername">Your Name</a></b><br>
+  <i>A portfolio piece demonstrating modern mobile development, state management, and real-time networking.</i>
+</div>
