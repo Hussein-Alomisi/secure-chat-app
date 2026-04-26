@@ -123,6 +123,6 @@ Demonstrating a vision for continuous improvement:
 ---
 
 <div align="center">
-  <b>Built with ❤️ by <a href="https://github.com/yourusername">Your Name</a></b><br>
+  <b>Built with ❤️ by <a href="https://github.com/Hussein-Alomisi">Hussein Alomisi</a></b><br>
   <i>A portfolio piece demonstrating modern mobile development, state management, and real-time networking.</i>
 </div>
